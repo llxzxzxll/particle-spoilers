@@ -37,3 +37,7 @@ Using the plugin is as simple as applying standard Markdown formatting.
 
 1. Copy `main.js`, `manifest.json`, and `styles.css` into `<your vault>/.obsidian/plugins/particle-spoilers/`.
 2. **Settings → Community plugins → Enable Smart Table.**
+
+#### Support
+
+Particle Spoilers is free and open source. If it's useful to you, you can support its development with a one-off tip: Donate via GRAM. Thank you!
