@@ -1,5 +1,4 @@
-
-# About
+# Particle Spoilers
 
 Particle Spoilers for Obsidian is a plugin that brings an interactive spoiler effect right into your notes. It hides sensitive text behind a dynamic animation of shimmering particles (a "dust" effect). The plugin is perfect for hiding answers to questions, plot spoilers, or personal data, revealing the text with a simple click.
 
