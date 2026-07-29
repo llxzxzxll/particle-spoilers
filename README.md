@@ -31,7 +31,6 @@ Using the plugin is as simple as applying standard Markdown formatting.
     - **Edit mode:** Choose whether the effect should work in Live Preview or only in Reading mode.
         
     - **Accent color:** Make the spoiler glow with the accent color of your current Obsidian theme for a perfect visual match.
-    - 
       
 ## Install
 
