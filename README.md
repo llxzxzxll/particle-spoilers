@@ -41,3 +41,7 @@ Using the plugin is as simple as applying standard Markdown formatting.
 #### Support
 
 Particle Spoilers is free and open source. If it's useful to you, you can support its development with a one-off tip: Donate via GRAM. Thank you!
+
+License
+
+MIT © LXXVII
