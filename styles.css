@@ -1,0 +1,52 @@
+.tg-spoiler {
+	position: relative;
+	display: inline-block;
+	cursor: pointer;
+	border-radius: 4px;
+	vertical-align: baseline;
+	line-height: inherit;
+	--tg-spoiler-particle-color: var(--text-normal);
+	outline: none;
+}
+
+.tg-spoiler-text {
+	position: relative;
+	display: inline-block;
+	padding: 0 3px;
+	filter: blur(0.3em);
+	user-select: none;
+	transition: filter 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out;
+	border-radius: 3px;
+	background-color: var(--tg-spoiler-tint-bg, var(--background-modifier-border));
+	box-shadow: 0 0 0 1px var(--tg-spoiler-tint-ring, var(--background-modifier-border));
+}
+
+.tg-spoiler-canvas {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border-radius: 3px;
+}
+
+/* Состояние "раскрыт" */
+.tg-spoiler-revealed .tg-spoiler-text {
+	filter: none;
+	user-select: text;
+	background: transparent;
+	box-shadow: none;
+	cursor: text;
+}
+
+.tg-spoiler-revealed .tg-spoiler-canvas {
+	opacity: 0;
+	transition: opacity 200ms ease-out;
+}
+
+.tg-spoiler:not(.tg-spoiler-revealed) .tg-spoiler-canvas {
+	opacity: 1;
+	transition: opacity 160ms ease-in;
+}
+
+.tg-spoiler:focus-visible {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
+}

@@ -1,0 +1,11 @@
+{
+	"id": "particle-spoilers",
+	"name": "Particle Spoilers",
+	"version": "1.0.0",
+	"minAppVersion": "1.4.0",
+	"description": "Hides text between ||double vertical bars|| under a particle animation.",
+	"author": "LXXVII",
+	"authorUrl": "https://github.com/llxzxzxll",
+	"fundingUrl": "GRAM Wallet: tonproxywallet.ton",
+	"isDesktopOnly": false
+}
