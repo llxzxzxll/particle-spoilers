@@ -28,7 +28,7 @@
 	border-radius: 3px;
 }
 
-/* Состояние "раскрыт" */
+/* "Revealed" state */
 .tg-spoiler-revealed .tg-spoiler-text {
 	filter: none;
 	user-select: text;
@@ -49,4 +49,33 @@
 
 .tg-spoiler:focus-visible {
 	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Block-style spoiler (Discord/Steam-style solid color block)                */
+/* -------------------------------------------------------------------------- */
+
+.tg-block-spoiler {
+	display: inline;
+	cursor: pointer;
+	border-radius: 3px;
+	padding: 0 1px;
+	color: transparent;
+	background-color: var(--tg-block-color, var(--interactive-accent));
+	transition: background-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out;
+	user-select: none;
+	outline: none;
+}
+
+.tg-block-spoiler-revealed {
+	/* Text color is never changed by the accent/custom color setting — only
+	   the (optional) background tint reflects it. */
+	color: inherit;
+	background-color: var(--tg-block-tint, transparent);
+	cursor: text;
+	user-select: text;
+}
+
+.tg-block-spoiler:focus-visible {
+	box-shadow: 0 0 0 2px var(--tg-block-color, var(--interactive-accent));
 }
