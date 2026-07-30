@@ -1,6 +1,6 @@
 "use strict";
 
-const { Plugin, PluginSettingTab, Setting } = require("obsidian");
+const { Plugin, PluginSettingTab, Setting, MarkdownView } = require("obsidian");
 const { WidgetType, Decoration, ViewPlugin } = require("@codemirror/view");
 const { RangeSetBuilder } = require("@codemirror/state");
 
@@ -16,6 +16,81 @@ const DEFAULT_SETTINGS = {
 
 const SPOILER_REGEX = /\|\|([^|\n]+)\|\|/g;
 const TWO_PI = Math.PI * 2;
+
+// --- SHARED ANIMATION SCHEDULER ---
+// Performance optimization: previously every SpoilerInstance ran its own
+// independent requestAnimationFrame loop. With many spoilers open at once
+// that meant many separate rAF callbacks doing the same kind of work every
+// frame. A single shared loop drives all of them instead, which is cheaper
+// for the browser to schedule and keeps the animation just as smooth (the
+// visible behavior — what gets drawn and when — is unchanged).
+class SharedAnimationScheduler {
+	constructor() {
+		this.members = new Set();
+		this.rafId = null;
+	}
+
+	add(instance) {
+		this.members.add(instance);
+		this.ensureRunning();
+	}
+
+	remove(instance) {
+		this.members.delete(instance);
+	}
+
+	ensureRunning() {
+		if (this.rafId !== null) return;
+		const loop = () => {
+			if (this.members.size === 0) {
+				this.rafId = null;
+				return;
+			}
+			for (let instance of this.members) instance.tick();
+			this.rafId = requestAnimationFrame(loop);
+		};
+		this.rafId = requestAnimationFrame(loop);
+	}
+}
+const sharedAnimator = new SharedAnimationScheduler();
+
+// --- COLOR RESOLUTION CACHE ---
+// normalizeColorToRgb() used to create a new <div>, insert it into the DOM,
+// read its computed style and remove it again — every single time a color
+// needed resolving (on every resize and every explicit refresh). A single
+// reusable hidden probe element plus a cache keyed by the input color string
+// avoids that repeated DOM churn; the resolved RGB values are identical to
+// before, so behavior does not change.
+const colorResolutionCache = new Map();
+let colorProbeEl = null;
+
+function getColorProbeEl() {
+	if (!colorProbeEl) {
+		colorProbeEl = document.createElement("span");
+		colorProbeEl.style.position = "absolute";
+		colorProbeEl.style.width = "0";
+		colorProbeEl.style.height = "0";
+		colorProbeEl.style.overflow = "hidden";
+		colorProbeEl.style.pointerEvents = "none";
+		colorProbeEl.setAttribute("aria-hidden", "true");
+		document.body.appendChild(colorProbeEl);
+	}
+	return colorProbeEl;
+}
+
+function resolveColorToRgb(colorStr) {
+	const cached = colorResolutionCache.get(colorStr);
+	if (cached !== undefined) return cached;
+
+	const probe = getColorProbeEl();
+	probe.style.color = colorStr;
+	const computedColor = getComputedStyle(probe).color;
+	const match = computedColor.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+	const result = match ? [match[1], match[2], match[3]] : null;
+
+	colorResolutionCache.set(colorStr, result);
+	return result;
+}
 
 // --- SPOILER REGISTRY ---
 class SpoilerRegistry {
@@ -49,7 +124,6 @@ class SpoilerRegistry {
 class SpoilerInstance {
 	constructor(text, settings, registry) {
 		this.particles = [];
-		this.rafId = null;
 		this.revealed = false;
 		this.destroyed = false;
 		this.settings = settings;
@@ -124,19 +198,6 @@ class SpoilerInstance {
 		}
 	}
 
-	normalizeColorToRgb(colorStr) {
-		const tempEl = document.createElement("div");
-		tempEl.style.color = colorStr;
-		tempEl.style.display = "none";
-		document.body.appendChild(tempEl);
-		
-		const computedColor = getComputedStyle(tempEl).color;
-		document.body.removeChild(tempEl);
-		
-		const match = computedColor.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-		return match ? [match[1], match[2], match[3]] : null;
-	}
-
 	applyColorFromText() {
 		let baseColor;
 		
@@ -156,7 +217,7 @@ class SpoilerInstance {
 		}
 
 		// Calculate RGB once and cache it to avoid overloading the animation loop (requestAnimationFrame)
-		const rgb = this.normalizeColorToRgb(baseColor);
+		const rgb = resolveColorToRgb(baseColor);
 		if (rgb) {
 			this.particleColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 			this.el.style.setProperty("--tg-spoiler-tint-bg", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.16)`);
@@ -198,24 +259,12 @@ class SpoilerInstance {
 	}
 
 	start() {
-		if (this.rafId !== null || this.destroyed) return;
-		
-		const loop = () => {
-			if (this.destroyed || this.revealed) {
-				this.rafId = null;
-				return;
-			}
-			this.tick();
-			this.rafId = requestAnimationFrame(loop);
-		};
-		this.rafId = requestAnimationFrame(loop);
+		if (this.destroyed) return;
+		sharedAnimator.add(this);
 	}
 
 	stop() {
-		if (this.rafId !== null) {
-			cancelAnimationFrame(this.rafId);
-			this.rafId = null;
-		}
+		sharedAnimator.remove(this);
 	}
 
 	tick() {
@@ -444,6 +493,19 @@ class ParticleSpoilerPlugin extends Plugin {
 		
 		this.addSettingTab(new ParticleSpoilerSettingTab(this.app, this));
 
+		// Ribbon icon: wraps the current editor selection in ||...|| with one click
+		this.addRibbonIcon("eye-off", "Insert spoiler", () => {
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (view) this.insertSpoilerAtSelection(view.editor);
+		});
+
+		// Command palette: same action, so it can be triggered or bound to a hotkey
+		this.addCommand({
+			id: "insert-spoiler",
+			name: "Insert spoiler",
+			editorCallback: (editor) => this.insertSpoilerAtSelection(editor)
+		});
+
 		// Observe changes to <body> attributes (accent color or theme changes)
 		this.themeObserver = new MutationObserver((mutations) => {
 			let shouldRefresh = false;
@@ -480,6 +542,13 @@ class ParticleSpoilerPlugin extends Plugin {
 		for (let view of this.editorViews) {
 			view.dispatch({});
 		}
+	}
+
+	// Wraps the current selection (or inserts an empty pair at the cursor) in ||...||
+	insertSpoilerAtSelection(editor) {
+		if (!editor) return;
+		const selection = editor.getSelection();
+		editor.replaceSelection(`||${selection}||`);
 	}
 
 	async loadSettings() {
