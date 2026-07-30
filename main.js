@@ -11,7 +11,10 @@ const DEFAULT_SETTINGS = {
 	revealOnClick: true,
 	hideOnMouseLeave: false,
 	disableInEditMode: false,
-	useAccentColor: false
+	useAccentColor: false,
+	spoilerStyle: "particle", // "particle" (existing) or "block" (solid-color Discord/Steam-style)
+	blockColorMode: "accent", // "accent" (app accent color) or "custom"
+	blockCustomColor: "#7c3aed" // used only when blockColorMode is "custom"
 };
 
 const SPOILER_REGEX = /\|\|([^|\n]+)\|\|/g;
@@ -337,6 +340,102 @@ class SpoilerInstance {
 	}
 }
 
+// --- BLOCK-STYLE SPOILER (Discord/Steam-style solid color block) ---
+// A much simpler alternative to SpoilerInstance: no canvas, no particles —
+// just a solid-colored span that hides the text until clicked. Kept as a
+// separate class so the existing Particle style above is left completely
+// untouched.
+class BlockSpoilerInstance {
+	constructor(text, settings, registry) {
+		this.revealed = false;
+		this.destroyed = false;
+		this.settings = settings;
+		this.registry = registry;
+
+		this.registry.add(this);
+
+		this.el = document.createElement("span");
+		this.el.className = "tg-block-spoiler";
+		this.el.textContent = text;
+		this.el.setAttribute("tabindex", "0");
+		this.el.setAttribute("role", "button");
+		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
+
+		this.el.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.toggle();
+		});
+
+		this.el.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				this.toggle();
+			}
+		});
+
+		this.el.addEventListener("mouseleave", () => {
+			if (this.revealed && this.settings.hideOnMouseLeave) {
+				this.hide();
+			}
+		});
+
+		this.applyColor();
+	}
+
+	// Resolves the accent color (or the custom color, if selected) once and
+	// caches the RGB breakdown via the shared resolveColorToRgb() helper —
+	// the same cache used by the Particle style, so no extra DOM churn.
+	applyColor() {
+		const raw = this.settings.blockColorMode === "custom" && this.settings.blockCustomColor
+			? this.settings.blockCustomColor
+			: getComputedStyle(document.body).getPropertyValue("--interactive-accent").trim() || "var(--interactive-accent)";
+
+		const rgb = resolveColorToRgb(raw);
+		if (rgb) {
+			this.el.style.setProperty("--tg-block-color", `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`);
+			this.el.style.setProperty("--tg-block-tint", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.14)`);
+		} else {
+			this.el.style.setProperty("--tg-block-color", raw);
+			this.el.style.setProperty("--tg-block-tint", raw);
+		}
+	}
+
+	// No-ops so the registry can call the same lifecycle methods on every
+	// instance regardless of style, without needing to know which type it is.
+	applyDensity() {}
+	applyColorFromText() { this.applyColor(); }
+
+	toggle() {
+		this.revealed ? this.hide() : this.show();
+	}
+
+	show() {
+		this.revealed = true;
+		this.el.classList.add("tg-block-spoiler-revealed");
+	}
+
+	hide() {
+		this.revealed = false;
+		this.el.classList.remove("tg-block-spoiler-revealed");
+	}
+
+	destroy() {
+		this.destroyed = true;
+		this.registry.remove(this);
+	}
+}
+
+// Picks the right implementation for the currently selected style. Both
+// classes expose the same interface (.el, .destroy(), .applyDensity(),
+// .applyColorFromText()) so the rest of the plugin never needs to know
+// which one it's holding.
+function createSpoilerInstance(text, settings, registry) {
+	return settings.spoilerStyle === "block"
+		? new BlockSpoilerInstance(text, settings, registry)
+		: new SpoilerInstance(text, settings, registry);
+}
+
 // --- READING MODE PARSER ---
 function renderMarkdownSpoilers(el, settings, registry) {
 	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
@@ -375,7 +474,7 @@ function renderMarkdownSpoilers(el, settings, registry) {
 				fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
 			}
 			
-			const spoiler = new SpoilerInstance(innerText, settings, registry);
+			const spoiler = createSpoilerInstance(innerText, settings, registry);
 			fragment.appendChild(spoiler.el);
 			lastIndex = match.index + fullMatch.length;
 		}
@@ -395,15 +494,21 @@ class SpoilerWidget extends WidgetType {
 		this.text = text;
 		this.settings = settings;
 		this.registry = registry;
+		// Snapshot the style as a plain string at creation time. settings is a
+		// shared, mutable object, so comparing settings.spoilerStyle directly
+		// in eq() would always read the CURRENT value on both sides and never
+		// detect a change — this primitive snapshot is what makes switching
+		// styles actually replace the widget's DOM instead of being ignored.
+		this.style = settings.spoilerStyle;
 		this.instance = null;
 	}
 
 	eq(other) {
-		return other.text === this.text && other.settings.useAccentColor === this.settings.useAccentColor;
+		return other.text === this.text && other.style === this.style;
 	}
 
 	toDOM() {
-		this.instance = new SpoilerInstance(this.text, this.settings, this.registry);
+		this.instance = createSpoilerInstance(this.text, this.settings, this.registry);
 		return this.instance.el;
 	}
 
@@ -544,6 +649,19 @@ class ParticleSpoilerPlugin extends Plugin {
 		}
 	}
 
+	// Forces already-open Reading view notes to re-render. Needed when the
+	// spoiler style changes: unlike density/color, switching between Particle
+	// and Block requires a different DOM structure, so existing elements
+	// can't just be mutated in place — the reading view has to rebuild them.
+	refreshReadingViews() {
+		for (let leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view;
+			if (view && view.getMode && view.getMode() === "preview" && view.previewMode && typeof view.previewMode.rerender === "function") {
+				view.previewMode.rerender(true);
+			}
+		}
+	}
+
 	// Wraps the current selection (or inserts an empty pair at the cursor) in ||...||
 	insertSpoilerAtSelection(editor) {
 		if (!editor) return;
@@ -571,34 +689,96 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		
-		containerEl.createEl("h2", { text: "Particle Style Spoiler" });
+		containerEl.createEl("h2", { text: "Spoiler settings" });
 
 		new Setting(containerEl)
-			.setName("Particle density")
-			.setDesc("Lower value means more particles (dust) in the spoiler.")
-			.addSlider(slider => slider
-				.setLimits(4, 40, 1)
-				.setValue(this.plugin.settings.particleDensity)
-				.setDynamicTooltip()
+			.setName("Spoiler style")
+			.setDesc("Particle: animated dust like Telegram. Block: a solid color rectangle like Discord/Steam.")
+			.addDropdown(dropdown => dropdown
+				.addOption("particle", "Particle")
+				.addOption("block", "Block (Discord/Steam-style)")
+				.setValue(this.plugin.settings.spoilerStyle)
 				.onChange(async (value) => {
-					this.plugin.settings.particleDensity = value;
+					this.plugin.settings.spoilerStyle = value;
 					await this.plugin.saveSettings();
-					this.plugin.registry.refreshDensity();
+					this.plugin.refreshEditors();
+					this.plugin.refreshReadingViews();
+					this.display(); // redraw so the Block-only options below appear/disappear
 				})
 			);
 
-		new Setting(containerEl)
-			.setName("Particle speed")
-			.setDesc("How fast the particles move.")
-			.addSlider(slider => slider
-				.setLimits(0.1, 1.5, 0.05)
-				.setValue(this.plugin.settings.particleSpeed)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.particleSpeed = value;
-					await this.plugin.saveSettings();
-				})
-			);
+		if (this.plugin.settings.spoilerStyle === "block") {
+			new Setting(containerEl)
+				.setName("Block spoiler color")
+				.setDesc("The Block style always uses a color — either the app's accent color, or a custom one you pick below.")
+				.addDropdown(dropdown => dropdown
+					.addOption("accent", "App accent color")
+					.addOption("custom", "Custom color")
+					.setValue(this.plugin.settings.blockColorMode)
+					.onChange(async (value) => {
+						this.plugin.settings.blockColorMode = value;
+						await this.plugin.saveSettings();
+						this.plugin.registry.refreshColors();
+						this.display();
+					})
+				);
+
+			if (this.plugin.settings.blockColorMode === "custom") {
+				new Setting(containerEl)
+					.setName("Custom block color")
+					.setDesc("Only affects the Block style — the Particle style is unaffected.")
+					.addColorPicker(picker => picker
+						.setValue(this.plugin.settings.blockCustomColor)
+						.onChange(async (value) => {
+							this.plugin.settings.blockCustomColor = value;
+							await this.plugin.saveSettings();
+							this.plugin.registry.refreshColors();
+						})
+					);
+			}
+		}
+
+		if (this.plugin.settings.spoilerStyle === "particle") {
+			new Setting(containerEl)
+				.setName("Particle density")
+				.setDesc("Lower value means more particles (dust) in the spoiler.")
+				.addSlider(slider => slider
+					.setLimits(4, 40, 1)
+					.setValue(this.plugin.settings.particleDensity)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.particleDensity = value;
+						await this.plugin.saveSettings();
+						this.plugin.registry.refreshDensity();
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Particle speed")
+				.setDesc("How fast the particles move.")
+				.addSlider(slider => slider
+					.setLimits(0.1, 1.5, 0.05)
+					.setValue(this.plugin.settings.particleSpeed)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.particleSpeed = value;
+						await this.plugin.saveSettings();
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Use accent color")
+				.setDesc("If enabled, the glow and particles will use the theme's accent color. Otherwise, the hidden text's color is used.")
+				.addToggle(toggle => toggle
+					.setValue(this.plugin.settings.useAccentColor)
+					.onChange(async (value) => {
+						this.plugin.settings.useAccentColor = value;
+						await this.plugin.saveSettings();
+						this.plugin.registry.refreshColors();
+						this.plugin.refreshEditors();
+					})
+				);
+		}
 
 		new Setting(containerEl)
 			.setName("Hide on mouse leave")
@@ -623,21 +803,8 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
-			.setName("Use accent color")
-			.setDesc("If enabled, the glow and particles will use the theme's accent color. Otherwise, the hidden text's color is used.")
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.useAccentColor)
-				.onChange(async (value) => {
-					this.plugin.settings.useAccentColor = value;
-					await this.plugin.saveSettings();
-					this.plugin.registry.refreshColors();
-					this.plugin.refreshEditors();
-				})
-			);
-
 		containerEl.createEl("p", {
-			text: "Syntax: ||hidden text|| — turns the text into a spoiler with particle animation. Works in both Reading mode and Live Preview.",
+			text: "Syntax: ||hidden text|| — turns the text into a spoiler. Works in both Reading mode and Live Preview.",
 			cls: "setting-item-description"
 		});
 	}
