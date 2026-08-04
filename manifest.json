@@ -1,9 +1,9 @@
 {
 	"id": "particle-spoilers",
 	"name": "Particle Spoilers",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"minAppVersion": "1.4.0",
-	"description": "Hides text between ||double vertical bars|| under a particle animation.",
+	"description": "Hides text between customizable markers under an interactive particle animation.",
 	"author": "LXXVII",
 	"authorUrl": "https://github.com/llxzxzxll",
 	"isDesktopOnly": false
