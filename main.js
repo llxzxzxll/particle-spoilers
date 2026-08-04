@@ -4,29 +4,30 @@ const { Plugin, PluginSettingTab, Setting, MarkdownView } = require("obsidian");
 const { WidgetType, Decoration, ViewPlugin } = require("@codemirror/view");
 const { RangeSetBuilder } = require("@codemirror/state");
 
-// --- CONSTANTS AND SETTINGS ---
 const DEFAULT_SETTINGS = {
-	particleDensity: 14,
-	particleSpeed: 0.35,
+	particleDensity: 10,
+	particleSpeed: 0.10,
 	revealOnClick: true,
 	hideOnMouseLeave: false,
-	disableInEditMode: false,
+	disableInEditMode: true,
 	useAccentColor: false,
-	spoilerStyle: "particle", // "particle" (existing) or "block" (solid-color Discord/Steam-style)
-	blockColorMode: "accent", // "accent" (app accent color) or "custom"
-	blockCustomColor: "#7c3aed" // used only when blockColorMode is "custom"
+	spoilerStyle: "particle",
+	blockColorMode: "accent",
+	blockCustomColor: "#000000",
+	customMarker: "||"
 };
 
-const SPOILER_REGEX = /\|\|([^|\n]+)\|\|/g;
 const TWO_PI = Math.PI * 2;
 
-// --- SHARED ANIMATION SCHEDULER ---
-// Performance optimization: previously every SpoilerInstance ran its own
-// independent requestAnimationFrame loop. With many spoilers open at once
-// that meant many separate rAF callbacks doing the same kind of work every
-// frame. A single shared loop drives all of them instead, which is cheaper
-// for the browser to schedule and keeps the animation just as smooth (the
-// visible behavior — what gets drawn and when — is unchanged).
+function escapeRegExp(string) {
+	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getSpoilerRegex(marker) {
+	const escaped = escapeRegExp(marker);
+	return new RegExp(`${escaped}([^\\n]+?)${escaped}`, "g");
+}
+
 class SharedAnimationScheduler {
 	constructor() {
 		this.members = new Set();
@@ -57,13 +58,6 @@ class SharedAnimationScheduler {
 }
 const sharedAnimator = new SharedAnimationScheduler();
 
-// --- COLOR RESOLUTION CACHE ---
-// normalizeColorToRgb() used to create a new <div>, insert it into the DOM,
-// read its computed style and remove it again — every single time a color
-// needed resolving (on every resize and every explicit refresh). A single
-// reusable hidden probe element plus a cache keyed by the input color string
-// avoids that repeated DOM churn; the resolved RGB values are identical to
-// before, so behavior does not change.
 const colorResolutionCache = new Map();
 let colorProbeEl = null;
 
@@ -95,7 +89,6 @@ function resolveColorToRgb(colorStr) {
 	return result;
 }
 
-// --- SPOILER REGISTRY ---
 class SpoilerRegistry {
 	constructor() {
 		this.instances = new Set();
@@ -123,7 +116,6 @@ class SpoilerRegistry {
 	}
 }
 
-// --- MAIN ANIMATION CLASS (CANVAS & PARTICLES) ---
 class SpoilerInstance {
 	constructor(text, settings, registry) {
 		this.particles = [];
@@ -131,7 +123,7 @@ class SpoilerInstance {
 		this.destroyed = false;
 		this.settings = settings;
 		this.registry = registry;
-		this.particleColor = "currentColor"; // Color cache for performance
+		this.particleColor = "currentColor"; 
 		
 		this.registry.add(this);
 		
@@ -209,7 +201,6 @@ class SpoilerInstance {
 
 		if (this.settings.useAccentColor) {
 			baseColor = getComputedStyle(document.body).getPropertyValue('--interactive-accent').trim();
-			// Fallback: if the variable is empty, use the text color
 			if (!baseColor) baseColor = originalTextColor;
 			
 			if (!this.revealed) {
@@ -219,7 +210,6 @@ class SpoilerInstance {
 			baseColor = originalTextColor;
 		}
 
-		// Calculate RGB once and cache it to avoid overloading the animation loop (requestAnimationFrame)
 		const rgb = resolveColorToRgb(baseColor);
 		if (rgb) {
 			this.particleColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
@@ -280,7 +270,6 @@ class SpoilerInstance {
 		
 		const speed = this.settings.particleSpeed;
 
-		// Use the cached color — this speeds up canvas rendering significantly
 		ctx.fillStyle = this.particleColor;
 
 		for (let p of this.particles) {
@@ -340,11 +329,6 @@ class SpoilerInstance {
 	}
 }
 
-// --- BLOCK-STYLE SPOILER (Discord/Steam-style solid color block) ---
-// A much simpler alternative to SpoilerInstance: no canvas, no particles —
-// just a solid-colored span that hides the text until clicked. Kept as a
-// separate class so the existing Particle style above is left completely
-// untouched.
 class BlockSpoilerInstance {
 	constructor(text, settings, registry) {
 		this.revealed = false;
@@ -383,9 +367,6 @@ class BlockSpoilerInstance {
 		this.applyColor();
 	}
 
-	// Resolves the accent color (or the custom color, if selected) once and
-	// caches the RGB breakdown via the shared resolveColorToRgb() helper —
-	// the same cache used by the Particle style, so no extra DOM churn.
 	applyColor() {
 		const raw = this.settings.blockColorMode === "custom" && this.settings.blockCustomColor
 			? this.settings.blockCustomColor
@@ -401,8 +382,6 @@ class BlockSpoilerInstance {
 		}
 	}
 
-	// No-ops so the registry can call the same lifecycle methods on every
-	// instance regardless of style, without needing to know which type it is.
 	applyDensity() {}
 	applyColorFromText() { this.applyColor(); }
 
@@ -426,25 +405,23 @@ class BlockSpoilerInstance {
 	}
 }
 
-// Picks the right implementation for the currently selected style. Both
-// classes expose the same interface (.el, .destroy(), .applyDensity(),
-// .applyColorFromText()) so the rest of the plugin never needs to know
-// which one it's holding.
 function createSpoilerInstance(text, settings, registry) {
 	return settings.spoilerStyle === "block"
 		? new BlockSpoilerInstance(text, settings, registry)
 		: new SpoilerInstance(text, settings, registry);
 }
 
-// --- READING MODE PARSER ---
 function renderMarkdownSpoilers(el, settings, registry) {
+	const marker = settings.customMarker;
+	const regex = getSpoilerRegex(marker);
+
 	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
 		acceptNode: (node) => {
 			const parent = node.parentElement;
 			if (!parent || parent.closest("code, pre, .tg-spoiler")) {
 				return NodeFilter.FILTER_REJECT;
 			}
-			if (!node.textContent || !node.textContent.includes("||")) {
+			if (!node.textContent || !node.textContent.includes(marker)) {
 				return NodeFilter.FILTER_SKIP;
 			}
 			return NodeFilter.FILTER_ACCEPT;
@@ -459,15 +436,15 @@ function renderMarkdownSpoilers(el, settings, registry) {
 
 	for (let node of nodesToReplace) {
 		const text = node.textContent || "";
-		SPOILER_REGEX.lastIndex = 0;
-		if (!SPOILER_REGEX.test(text)) continue;
+		regex.lastIndex = 0;
+		if (!regex.test(text)) continue;
 		
-		SPOILER_REGEX.lastIndex = 0;
+		regex.lastIndex = 0;
 		const fragment = document.createDocumentFragment();
 		let lastIndex = 0;
 		let match;
 		
-		while ((match = SPOILER_REGEX.exec(text))) {
+		while ((match = regex.exec(text))) {
 			const [fullMatch, innerText] = match;
 			
 			if (match.index > lastIndex) {
@@ -487,18 +464,12 @@ function renderMarkdownSpoilers(el, settings, registry) {
 	}
 }
 
-// --- LIVE PREVIEW COMPONENT ---
 class SpoilerWidget extends WidgetType {
 	constructor(text, settings, registry) {
 		super();
 		this.text = text;
 		this.settings = settings;
 		this.registry = registry;
-		// Snapshot the style as a plain string at creation time. settings is a
-		// shared, mutable object, so comparing settings.spoilerStyle directly
-		// in eq() would always read the CURRENT value on both sides and never
-		// detect a change — this primitive snapshot is what makes switching
-		// styles actually replace the widget's DOM instead of being ignored.
 		this.style = settings.spoilerStyle;
 		this.instance = null;
 	}
@@ -531,13 +502,14 @@ function buildSpoilerDecorations(view, settings, registry) {
 	
 	const builder = new RangeSetBuilder();
 	const selection = view.state.selection;
+	const regex = getSpoilerRegex(settings.customMarker);
 	
 	for (let { from, to } of view.visibleRanges) {
 		const text = view.state.doc.sliceString(from, to);
-		SPOILER_REGEX.lastIndex = 0;
+		regex.lastIndex = 0;
 		let match;
 		
-		while ((match = SPOILER_REGEX.exec(text))) {
+		while ((match = regex.exec(text))) {
 			const matchStart = from + match.index;
 			const matchEnd = matchStart + match[0].length;
 			
@@ -577,7 +549,6 @@ function createSpoilerViewPlugin(settings, registry, editorViews) {
 	});
 }
 
-// --- MAIN PLUGIN CLASS ---
 class ParticleSpoilerPlugin extends Plugin {
 	constructor() {
 		super(...arguments);
@@ -598,24 +569,20 @@ class ParticleSpoilerPlugin extends Plugin {
 		
 		this.addSettingTab(new ParticleSpoilerSettingTab(this.app, this));
 
-		// Ribbon icon: wraps the current editor selection in ||...|| with one click
 		this.addRibbonIcon("eye-off", "Insert spoiler", () => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (view) this.insertSpoilerAtSelection(view.editor);
 		});
 
-		// Command palette: same action, so it can be triggered or bound to a hotkey
 		this.addCommand({
 			id: "insert-spoiler",
 			name: "Insert spoiler",
 			editorCallback: (editor) => this.insertSpoilerAtSelection(editor)
 		});
 
-		// Observe changes to <body> attributes (accent color or theme changes)
 		this.themeObserver = new MutationObserver((mutations) => {
 			let shouldRefresh = false;
 			for (let mutation of mutations) {
-				// If classes changed (light/dark theme toggle) or styles changed (accent color change)
 				if (mutation.type === 'attributes' && (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
 					shouldRefresh = true;
 					break;
@@ -623,7 +590,6 @@ class ParticleSpoilerPlugin extends Plugin {
 			}
 			
 			if (shouldRefresh) {
-				// Give the browser 20ms to apply new styles, then refresh all open spoilers
 				setTimeout(() => {
 					this.registry.refreshColors();
 				}, 20);
@@ -649,10 +615,6 @@ class ParticleSpoilerPlugin extends Plugin {
 		}
 	}
 
-	// Forces already-open Reading view notes to re-render. Needed when the
-	// spoiler style changes: unlike density/color, switching between Particle
-	// and Block requires a different DOM structure, so existing elements
-	// can't just be mutated in place — the reading view has to rebuild them.
 	refreshReadingViews() {
 		for (let leaf of this.app.workspace.getLeavesOfType("markdown")) {
 			const view = leaf.view;
@@ -662,11 +624,11 @@ class ParticleSpoilerPlugin extends Plugin {
 		}
 	}
 
-	// Wraps the current selection (or inserts an empty pair at the cursor) in ||...||
 	insertSpoilerAtSelection(editor) {
 		if (!editor) return;
 		const selection = editor.getSelection();
-		editor.replaceSelection(`||${selection}||`);
+		const marker = this.settings.customMarker;
+		editor.replaceSelection(`${marker}${selection}${marker}`);
 	}
 
 	async loadSettings() {
@@ -678,7 +640,6 @@ class ParticleSpoilerPlugin extends Plugin {
 	}
 }
 
-// --- UI SETTINGS ---
 class ParticleSpoilerSettingTab extends PluginSettingTab {
 	constructor(app, plugin) {
 		super(app, plugin);
@@ -692,6 +653,24 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 		containerEl.createEl("h2", { text: "Spoiler settings" });
 
 		new Setting(containerEl)
+			.setName("Custom marker")
+			.setDesc("Set a custom marker for spoilers to avoid conflicts (e.g. !!, %%, etc.).")
+			.addText(text => text
+				.setValue(this.plugin.settings.customMarker)
+				.onChange(async (value) => {
+					const trimmed = value.trim();
+					if (trimmed.length < 2) return;
+					this.plugin.settings.customMarker = trimmed;
+					await this.plugin.saveSettings();
+					this.plugin.refreshEditors();
+					this.plugin.refreshReadingViews();
+					if (this.syntaxDesc) {
+						this.syntaxDesc.setText(`Syntax: ${trimmed}hidden text${trimmed} — turns the text into a spoiler. Works in both Reading mode and Live Preview.`);
+					}
+				})
+			);
+
+		new Setting(containerEl)
 			.setName("Spoiler style")
 			.setDesc("Particle: animated dust like Telegram. Block: a solid color rectangle like Discord/Steam.")
 			.addDropdown(dropdown => dropdown
@@ -703,7 +682,7 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					this.plugin.refreshEditors();
 					this.plugin.refreshReadingViews();
-					this.display(); // redraw so the Block-only options below appear/disappear
+					this.display();
 				})
 			);
 
@@ -793,7 +772,7 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Disable effect in Edit mode")
-			.setDesc("If enabled, spoilers won't be hidden in Live Preview (visible as normal text ||...||), the effect applies only in Reading mode.")
+			.setDesc("If enabled, spoilers won't be hidden in Live Preview, the effect applies only in Reading mode.")
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.disableInEditMode)
 				.onChange(async (value) => {
@@ -803,8 +782,8 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl("p", {
-			text: "Syntax: ||hidden text|| — turns the text into a spoiler. Works in both Reading mode and Live Preview.",
+		this.syntaxDesc = containerEl.createEl("p", {
+			text: `Syntax: ${this.plugin.settings.customMarker}hidden text${this.plugin.settings.customMarker} — turns the text into a spoiler. Works in both Reading mode and Live Preview.`,
 			cls: "setting-item-description"
 		});
 	}
