@@ -8,7 +8,8 @@ Particle Spoilers for Obsidian is a plugin that brings interactive spoiler effec
 ## Usage
 Using the plugin is as simple as applying standard Markdown formatting or using the built-in commands.
 
-- **Syntax:** to hide text, simply wrap it in your chosen marker, which defaults to double vertical bars `||`. *Example:* `||This is a secret message||`.
+- **Syntax:** to hide text, simply wrap it in your chosen marker, which defaults to double vertical bars `||`.
+	- *Example:* `||This is a secret message||`.
 - **Inserting:** you can easily wrap selected text by clicking the "eye-off" icon in the ribbon, or by using the "Insert spoiler" command in the command palette.
 - **Settings:** go to the plugin settings to customize it to your liking:
     - **Spoiler style:** 
