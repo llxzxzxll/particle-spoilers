@@ -79,3 +79,37 @@
 .tg-block-spoiler:focus-visible {
 	box-shadow: 0 0 0 2px var(--tg-block-color, var(--interactive-accent));
 }
+
+/* -------------------------------------------------------------------------- */
+/* Blur-style spoiler (soft blur filter over the text)                        */
+/* -------------------------------------------------------------------------- */
+
+.tg-blur-spoiler {
+	position: relative;
+	display: inline-block;
+	cursor: pointer;
+	border-radius: 3px;
+	vertical-align: baseline;
+	line-height: inherit;
+	filter: blur(var(--tg-blur-amount, 5px));
+	-webkit-filter: blur(var(--tg-blur-amount, 5px));
+	transition: filter 160ms ease-out, -webkit-filter 160ms ease-out;
+	outline: none;
+	user-select: none;
+}
+
+.tg-blur-spoiler-revealed {
+	filter: none;
+	-webkit-filter: none;
+	cursor: text;
+	user-select: text;
+}
+
+body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
+	filter: none;
+	-webkit-filter: none;
+}
+
+.tg-blur-spoiler:focus-visible {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
