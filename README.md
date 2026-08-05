@@ -18,7 +18,7 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 		- Blur (soft blur filter).
     - **Custom marker:** set a custom syntax marker (e.g., `!!`, `%%`) to avoid conflicts with other Markdown elements.
     - **Style Options:**
-        - *Particle:* control the particle density and movement speed, and choose whether to use the app's accent color for the effect].
+        - *Particle:* control the particle density and movement speed, and choose whether to use the app's accent color for the effect.
         - *Block:* choose between using the app's accent color or selecting a custom color via a color picker.
         - *Blur:* adjust the blur amount in pixels and optionally enable "Reveal on hover" to show the text without clicking.
     - **Hide on mouse leave:** the text will automatically close when you move your mouse away from the revealed spoiler.
