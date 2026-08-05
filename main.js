@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS = {
 	spoilerStyle: "particle",
 	blockColorMode: "accent",
 	blockCustomColor: "#000000",
+	blurAmount: 5,
+	blurRevealOnHover: false,
 	customMarker: "||"
 };
 
@@ -405,10 +407,79 @@ class BlockSpoilerInstance {
 	}
 }
 
+class BlurSpoilerInstance {
+	constructor(text, settings, registry) {
+		this.revealed = false;
+		this.destroyed = false;
+		this.settings = settings;
+		this.registry = registry;
+
+		this.registry.add(this);
+
+		this.el = document.createElement("span");
+		this.el.className = "tg-blur-spoiler";
+		this.el.textContent = text;
+		this.el.setAttribute("tabindex", "0");
+		this.el.setAttribute("role", "button");
+		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
+
+		this.el.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.toggle();
+		});
+
+		this.el.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				this.toggle();
+			}
+		});
+
+		this.el.addEventListener("mouseleave", () => {
+			if (this.revealed && this.settings.hideOnMouseLeave) {
+				this.hide();
+			}
+		});
+
+		this.applyBlurAmount();
+	}
+
+	applyBlurAmount() {
+		const amount = this.settings.blurAmount ?? 5;
+		this.el.style.setProperty("--tg-blur-amount", `${amount}px`);
+	}
+
+	applyDensity() { this.applyBlurAmount(); }
+	applyColorFromText() {}
+
+	toggle() {
+		this.revealed ? this.hide() : this.show();
+	}
+
+	show() {
+		this.revealed = true;
+		this.el.classList.add("tg-blur-spoiler-revealed");
+	}
+
+	hide() {
+		this.revealed = false;
+		this.el.classList.remove("tg-blur-spoiler-revealed");
+	}
+
+	destroy() {
+		this.destroyed = true;
+		this.registry.remove(this);
+	}
+}
+
 function createSpoilerInstance(text, settings, registry) {
-	return settings.spoilerStyle === "block"
-		? new BlockSpoilerInstance(text, settings, registry)
-		: new SpoilerInstance(text, settings, registry);
+	if (settings.spoilerStyle === "block") {
+		return new BlockSpoilerInstance(text, settings, registry);
+	} else if (settings.spoilerStyle === "blur") {
+		return new BlurSpoilerInstance(text, settings, registry);
+	}
+	return new SpoilerInstance(text, settings, registry);
 }
 
 function renderMarkdownSpoilers(el, settings, registry) {
@@ -558,6 +629,7 @@ class ParticleSpoilerPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		this.applyBlurHoverClass();
 		
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			renderMarkdownSpoilers(el, this.settings, this.registry);
@@ -606,7 +678,17 @@ class ParticleSpoilerPlugin extends Plugin {
 		if (this.themeObserver) {
 			this.themeObserver.disconnect();
 		}
+		document.body.removeClass("obsidian-blur-hover");
 		this.registry.destroyAll();
+	}
+
+	applyBlurHoverClass() {
+		const body = document.body;
+		if (this.settings.blurRevealOnHover) {
+			body.addClass("obsidian-blur-hover");
+		} else {
+			body.removeClass("obsidian-blur-hover");
+		}
 	}
 
 	refreshEditors() {
@@ -672,10 +754,11 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Spoiler style")
-			.setDesc("Particle: animated dust like Telegram. Block: a solid color rectangle like Discord/Steam.")
+			.setDesc("Particle: animated dust like Telegram. Block: a solid color rectangle like Discord/Steam. Blur: a soft blur filter over the text.")
 			.addDropdown(dropdown => dropdown
 				.addOption("particle", "Particle")
 				.addOption("block", "Block (Discord/Steam-style)")
+				.addOption("blur", "Blur")
 				.setValue(this.plugin.settings.spoilerStyle)
 				.onChange(async (value) => {
 					this.plugin.settings.spoilerStyle = value;
@@ -715,6 +798,34 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 						})
 					);
 			}
+		}
+
+		if (this.plugin.settings.spoilerStyle === "blur") {
+			new Setting(containerEl)
+				.setName("Blur amount")
+				.setDesc("How strong the blur effect is, in pixels.")
+				.addSlider(slider => slider
+					.setLimits(1, 15, 1)
+					.setValue(this.plugin.settings.blurAmount)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.blurAmount = value;
+						await this.plugin.saveSettings();
+						this.plugin.registry.refreshDensity();
+					})
+				);
+
+			new Setting(containerEl)
+				.setName("Reveal on hover")
+				.setDesc("If enabled, hovering the mouse over a blurred spoiler will reveal it without clicking.")
+				.addToggle(toggle => toggle
+					.setValue(this.plugin.settings.blurRevealOnHover)
+					.onChange(async (value) => {
+						this.plugin.settings.blurRevealOnHover = value;
+						await this.plugin.saveSettings();
+						this.plugin.applyBlurHoverClass();
+					})
+				);
 		}
 
 		if (this.plugin.settings.spoilerStyle === "particle") {
