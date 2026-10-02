@@ -3,7 +3,7 @@
 </div>
 
 # Particle Spoilers
-Particle Spoilers for Obsidian is a plugin that brings interactive spoiler effects right into your notes. It hides sensitive text, answers, or plot spoilers using your choice of three distinct styles: a dynamic animation of shimmering particles, a solid color block (similar to Discord or Steam), or a soft blur filter. The hidden text can be easily revealed with a simple click.
+Particle Spoilers for Obsidian is a plugin that brings interactive spoiler effects right into your notes. It hides sensitive text, answers, or plot spoilers using your choice of five distinct styles: a dynamic animation of shimmering particles, a solid color block (similar to Discord or Steam), a soft blur filter, scrambled and rotated characters, or a digital matrix rain. The hidden text can be easily revealed with a simple click.
 
 ## Usage
 Using the plugin is as simple as applying standard Markdown formatting or using the built-in commands.
@@ -15,12 +15,17 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
     - **Spoiler style:** 
 		- Particle (animated dust);
 		- Block (solid color rectangle);
-		- Blur (soft blur filter).
+		- Blur (soft blur filter);
+		- Scramble (shuffled and rotated characters);
+		- Matrix (digital rain of falling glyphs).
     - **Custom marker:** set a custom syntax marker (e.g., `!!`, `%%`) to avoid conflicts with other Markdown elements.
     - **Style Options:**
         - *Particle:* control the particle density and movement speed, and choose whether to use the app's accent color for the effect.
         - *Block:* choose between using the app's accent color or selecting a custom color via a color picker.
         - *Blur:* adjust the blur amount in pixels and optionally enable "Reveal on hover" to show the text without clicking.
+        - *Scramble:* adjust the letter-shuffling speed, toggle between the app's accent color and normal text color, and optionally enable "Reveal on hover".
+        - *Matrix:* control the digital rain fall speed and optionally enable "Reveal on hover".
+    - **Reveal on hover:** available for Blur, Scramble, and Matrix styles. Hovering reveals the text temporarily; clicking while hovering keeps it open.
     - **Hide on mouse leave:** the text will automatically close when you move your mouse away from the revealed spoiler.
     - **Disable effect in Edit mode:** choose whether the spoilers should be hidden in Live Preview, or only apply the effect in Reading mode.
 
@@ -31,6 +36,8 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 <img alt="screen-particle-w" src="https://github.com/user-attachments/assets/b4288bfc-64b4-4cd0-80a6-5b419b921c4f" width="100%" /> | <img alt="screen-particle" src="https://github.com/user-attachments/assets/d1cf56a0-8cc7-40d8-a0fb-432576ced48b" width="100%" /> |
 <img alt="screen-block-w" src="https://github.com/user-attachments/assets/184e56e1-8ca0-48f6-b283-38847d4bfe13" width="100%" /> | <img alt="screen-block" src="https://github.com/user-attachments/assets/29c05e36-ad49-4a8b-a7f8-01f37f05237d" width="100%" /> |
 <img alt="screen-blur-w" src="https://github.com/user-attachments/assets/96e67c8d-f885-4e2a-a933-85f4d355e38a" width="100%" /> | <img alt="screen-blur" src="https://github.com/user-attachments/assets/d2689ca9-c543-4c94-bc0a-5e81dc32a67f" width="100%" /> |
+<img alt="screen-scramble-w" src="https://github.com/user-attachments/assets/99f02628-1cca-4f86-a377-031449737f83" width="100%" /> | <img alt="screen-scramble" src="https://github.com/user-attachments/assets/0d986412-1522-434b-b4a0-12e127ced2a4" width="100%" /> |
+<img alt="screen-matrix-w" src="https://github.com/user-attachments/assets/a04d3c12-88a3-42e2-b34c-10fcfb0ad04d" width="100%" /> | <img alt="screen-matrix" src="https://github.com/user-attachments/assets/994cf7ba-ee28-44bf-8f1a-2f21ce8454b3" width="100%" /> |
 
 <details>
   <summary>.gif (light theme demo)</summary>
@@ -56,6 +63,7 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 
 ### Upcoming features
 
+- **Static Scramble mode**: an option to make the Scramble effect static, with the ability to randomly reshuffle characters on demand using a ⟳ button.
 - **Bulk reveal**: a new command will be added to the Obsidian command palette — "Reveal all spoilers in note", allowing you to open all hidden elements at once.
 - **Per-note style customization**: support for your note's `cssclasses` property to apply a specific spoiler style, overriding the global settings.
 
