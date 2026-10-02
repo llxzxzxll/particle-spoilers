@@ -39,6 +39,8 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 <img alt="screen-scramble-w" src="https://github.com/user-attachments/assets/99f02628-1cca-4f86-a377-031449737f83" width="100%" /> | <img alt="screen-scramble" src="https://github.com/user-attachments/assets/0d986412-1522-434b-b4a0-12e127ced2a4" width="100%" /> |
 <img alt="screen-matrix-w" src="https://github.com/user-attachments/assets/a04d3c12-88a3-42e2-b34c-10fcfb0ad04d" width="100%" /> | <img alt="screen-matrix" src="https://github.com/user-attachments/assets/994cf7ba-ee28-44bf-8f1a-2f21ce8454b3" width="100%" /> |
 
+---
+
 <details>
   <summary>.gif particle, block, blur (dark theme demo)</summary>
   
@@ -53,6 +55,8 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
   
 
 </details>
+
+---
 
 <details>
   <summary>.gif matrix, scramble (dark theme demo)</summary>
