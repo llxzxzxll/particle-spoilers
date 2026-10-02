@@ -51,10 +51,6 @@
 	box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Block-style spoiler (Discord/Steam-style solid color block)                */
-/* -------------------------------------------------------------------------- */
-
 .tg-block-spoiler {
 	display: inline;
 	cursor: pointer;
@@ -68,8 +64,6 @@
 }
 
 .tg-block-spoiler-revealed {
-	/* Text color is never changed by the accent/custom color setting — only
-	   the (optional) background tint reflects it. */
 	color: inherit;
 	background-color: var(--tg-block-tint, transparent);
 	cursor: text;
@@ -79,10 +73,6 @@
 .tg-block-spoiler:focus-visible {
 	box-shadow: 0 0 0 2px var(--tg-block-color, var(--interactive-accent));
 }
-
-/* -------------------------------------------------------------------------- */
-/* Blur-style spoiler (soft blur filter over the text)                        */
-/* -------------------------------------------------------------------------- */
 
 .tg-blur-spoiler {
 	position: relative;
@@ -112,4 +102,208 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 
 .tg-blur-spoiler:focus-visible {
 	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.tg-scramble-spoiler {
+	display: inline;
+	cursor: pointer;
+	border-radius: 3px;
+	padding: 0 2px;
+	user-select: none;
+	outline: none;
+}
+
+.tg-scramble-word {
+	white-space: nowrap;
+}
+
+.tg-scramble-char {
+	display: inline-block;
+	text-align: center;
+	transform-origin: center;
+}
+
+.tg-scramble-spoiler-revealed {
+	cursor: text;
+	user-select: text;
+}
+
+.tg-scramble-spoiler:focus-visible {
+	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.tg-matrix-spoiler {
+	position: relative;
+	display: inline-block;
+	cursor: pointer;
+	border-radius: 3px;
+	vertical-align: baseline;
+	line-height: 1.2;
+	outline: none;
+}
+
+.tg-matrix-text {
+	position: relative;
+	display: inline-block;
+	padding: 0 3px;
+	color: transparent;
+	user-select: none;
+}
+
+.tg-matrix-canvas {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	border-radius: 3px;
+	opacity: 1;
+	transition: opacity 160ms ease-in;
+	filter: drop-shadow(0 0 3px rgba(0, 255, 65, 0.45));
+}
+
+.tg-matrix-spoiler-revealed .tg-matrix-text {
+	color: inherit;
+	user-select: text;
+	cursor: text;
+}
+
+.tg-matrix-spoiler-revealed .tg-matrix-canvas {
+	opacity: 0;
+	transition: opacity 200ms ease-out;
+}
+
+.tg-matrix-spoiler:focus-visible {
+	box-shadow: 0 0 0 2px #00ff41;
+}
+
+.modal.tg-whats-new-modal {
+	width: 600px;
+	max-width: calc(100vw - 40px);
+	overflow: hidden;
+}
+
+.modal.tg-whats-new-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+	padding: 16px;
+}
+
+.modal.tg-whats-new-modal .modal-close-button {
+	z-index: 10;
+	pointer-events: auto;
+}
+
+.tg-whats-new-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	max-height: min(70vh, 520px);
+	overflow-y: auto;
+	padding-right: 8px;
+	padding-bottom: 16px;
+}
+
+.tg-whats-new-version { margin-bottom: 16px; }
+.tg-whats-new-version:last-child { margin-bottom: 0; }
+
+.tg-whats-new-version h3 {
+	display: block;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+	background: var(--background-secondary);
+	margin: 0 0 4px;
+	padding: 6px 10px;
+	border-radius: 6px;
+}
+
+.tg-whats-new-features { margin-left: 16px; }
+
+.tg-whats-new-category {
+	font-weight: bold;
+	margin-top: 8px;
+	margin-bottom: 4px;
+}
+
+.tg-whats-new-info {
+	margin-bottom: 12px;
+	color: var(--text-normal);
+	line-height: 1.5;
+	font-size: 14px;
+}
+
+.tg-whats-new-divider {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 0;
+	margin-bottom: 16px;
+}
+
+.tg-whats-new-version ul {
+	list-style: disc;
+	margin: 0;
+	padding-left: 16px;
+}
+
+.tg-whats-new-version li {
+	margin-bottom: 4px;
+	color: var(--text-normal);
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.tg-highlight {
+	background-color: var(--text-highlight-bg);
+	color: var(--text-normal);
+	padding: 0 2px;
+	border-radius: 3px;
+	font-weight: 600;
+}
+
+.tg-whats-new-category--upcoming {
+	color: var(--text-accent);
+}
+
+.tg-whats-new-info code,
+.tg-whats-new-version li code {
+	color: var(--code-normal);
+	background-color: var(--code-background);
+	padding: 0.1em 0.35em;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+
+.tg-whats-new-buttons {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	justify-content: center;
+}
+
+.tg-whats-new-image {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: 8px 0;
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+@media (max-width: 768px) {
+	.modal.tg-whats-new-modal {
+		width: calc(100vw - 40px);
+		max-width: calc(100vw - 40px);
+		margin: 0 auto;
+	}
+	.modal.tg-whats-new-modal .modal-content { padding: 12px; }
+	.tg-whats-new-scroll {
+		max-height: min(60vh, 360px);
+		padding-right: 4px;
+	}
+	.tg-whats-new-info,
+	.tg-whats-new-version li,
+	.tg-whats-new-category {
+		font-size: 15px;
+		line-height: 1.6;
+	}
+	.tg-whats-new-version h3 { font-size: 15px; }
 }
