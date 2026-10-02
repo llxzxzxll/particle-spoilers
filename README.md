@@ -40,19 +40,35 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 <img alt="screen-matrix-w" src="https://github.com/user-attachments/assets/a04d3c12-88a3-42e2-b34c-10fcfb0ad04d" width="100%" /> | <img alt="screen-matrix" src="https://github.com/user-attachments/assets/994cf7ba-ee28-44bf-8f1a-2f21ce8454b3" width="100%" /> |
 
 <details>
-  <summary>.gif (light theme demo)</summary>
+  <summary>.gif particle, block, blur (dark theme demo)</summary>
   
-  <img width="1023" height="722" alt="light theme demo" src="https://github.com/user-attachments/assets/d874ca9b-f230-497b-a1dd-8d47a18be585" />
+  <img width="1023" height="722" alt="particle, block, blur dark theme demo" src="https://github.com/user-attachments/assets/5441cb7d-b493-497b-9747-877133a73abc" />
 
 </details>
 
 <details>
-  <summary>.gif (dark theme demo)</summary>
+  <summary>.gif particle, block, blur (light theme demo)</summary>
 
-  <img width="1023" height="722" alt="dark theme demo" src="https://github.com/user-attachments/assets/5441cb7d-b493-497b-9747-877133a73abc" />
+  <img width="1023" height="722" alt="particle, block, blur light theme demo" src="https://github.com/user-attachments/assets/d874ca9b-f230-497b-a1dd-8d47a18be585" />
   
 
 </details>
+
+<details>
+  <summary>.gif matrix, scramble (dark theme demo)</summary>
+  
+  <img width="1023" height="722" alt="matrix, scramble dark theme demo" src="https://github.com/user-attachments/assets/ae99073a-b0a5-416f-861c-a3736d3e711f" />
+
+</details>
+
+<details>
+  <summary>.gif matrix, scramble (light theme demo)</summary>
+
+  <img width="1023" height="722" alt="matrix, scramble light theme demo" src="https://github.com/user-attachments/assets/fb8b19df-3c4e-43c5-a2cb-0c2ab1a638b6" />
+  
+
+</details>
+
 
 ## Install
 
