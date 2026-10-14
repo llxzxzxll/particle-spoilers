@@ -1,9 +1,18 @@
 <div align="center">
-<img alt="banner" src="https://github.com/user-attachments/assets/9e05ab61-8a0f-4962-a8da-839f890908b2" width="100%" />
-</div>
 
 # Particle Spoilers
 Particle Spoilers for Obsidian is a plugin that brings interactive spoiler effects right into your notes. It hides sensitive text, answers, or plot spoilers using your choice of five distinct styles: a dynamic animation of shimmering particles, a solid color block (similar to Discord or Steam), a soft blur filter, scrambled and rotated characters, or a digital matrix rain. The hidden text can be easily revealed with a simple click.
+
+[![GitHub release](https://img.shields.io/github/v/release/llxzxzxll/particle-spoilers?style=flat-square&color=7c3aed)](https://github.com/llxzxzxll/particle-spoilers/releases)
+[![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=7c3aed&label=downloads&query=%24%5B%22particle-spoilers%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=flat-square)](https://obsidian.md/plugins?id=particle-spoilers)
+[![Min Obsidian Version](https://img.shields.io/badge/Obsidian-1.4.0%2B-483699?style=flat-square&logo=obsidian)](https://obsidian.md)
+[![License](https://img.shields.io/github/license/llxzxzxll/particle-spoilers?style=flat-square)](LICENSE)
+
+<br>
+
+<img alt="banner" src="https://github.com/user-attachments/assets/9e05ab61-8a0f-4962-a8da-839f890908b2" width="100%" />
+
+</div>
 
 ## Usage
 Using the plugin is as simple as applying standard Markdown formatting or using the built-in commands.
@@ -23,7 +32,7 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
         - *Particle:* control the particle density and movement speed, and choose whether to use the app's accent color for the effect.
         - *Block:* choose between using the app's accent color or selecting a custom color via a color picker.
         - *Blur:* adjust the blur amount in pixels and optionally enable "Reveal on hover" to show the text without clicking.
-        - *Scramble:* adjust the letter-shuffling speed, toggle between the app's accent color and normal text color, and optionally enable "Reveal on hover".
+        - *Scramble:* adjust the letter-shuffling speed, enable "Static scramble mode" to keep characters static (with a ⟳ button in settings to reshuffle on demand), toggle between the app's accent color and normal text color, and optionally enable "Reveal on hover".
         - *Matrix:* control the digital rain fall speed and optionally enable "Reveal on hover".
     - **Reveal on hover:** available for Blur, Scramble, and Matrix styles. Hovering reveals the text temporarily; clicking while hovering keeps it open.
     - **Hide on mouse leave:** the text will automatically close when you move your mouse away from the revealed spoiler.
@@ -83,7 +92,6 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 
 ### Upcoming features
 
-- **Static Scramble mode**: an option to make the Scramble effect static, with the ability to randomly reshuffle characters on demand using a ⟳ button.
 - **Bulk reveal**: a new command will be added to the Obsidian command palette — "Reveal all spoilers in note", allowing you to open all hidden elements at once.
 - **Per-note style customization**: support for your note's `cssclasses` property to apply a specific spoiler style, overriding the global settings.
 
@@ -91,10 +99,10 @@ Using the plugin is as simple as applying standard Markdown formatting or using 
 
 Particle Spoilers is free and open source. If it's useful to you, you can support its development with TON or USDT on the TON network: <kbd>tonproxywallet.ton</kbd> | <kbd>UQALKfbKI2Czizms4SisKXHnejG2iEoH26O-fy3_rJ5FbJDu</kbd>
 
-**Thank you!**
+Thank you!
 
 ---
 
 License
 
-MIT © LXXVII
+[MIT License](LICENSE) © [LXXVII](https://github.com/llxzxzxll)
