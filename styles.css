@@ -28,7 +28,6 @@
 	border-radius: 3px;
 }
 
-/* "Revealed" state */
 .tg-spoiler-revealed .tg-spoiler-text {
 	filter: none;
 	user-select: text;
@@ -61,6 +60,14 @@
 	transition: background-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out;
 	user-select: none;
 	outline: none;
+}
+
+.tg-block-spoiler:not(.tg-block-spoiler-revealed) * {
+	color: transparent !important;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
 }
 
 .tg-block-spoiler-revealed {
@@ -113,6 +120,14 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 	outline: none;
 }
 
+.tg-scramble-spoiler:not(.tg-scramble-spoiler-revealed) * {
+	color: inherit !important;
+	background-color: transparent !important;
+	font-weight: normal !important;
+	font-style: normal !important;
+	text-decoration: none !important;
+}
+
 .tg-scramble-word {
 	white-space: nowrap;
 }
@@ -132,6 +147,12 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 	box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
+button.tg-scramble-reshuffle-setting-btn {
+	font-size: 16px;
+	line-height: 1;
+	padding: 0 10px;
+}
+
 .tg-matrix-spoiler {
 	position: relative;
 	display: inline-block;
@@ -148,6 +169,14 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 	padding: 0 3px;
 	color: transparent;
 	user-select: none;
+}
+
+.tg-matrix-spoiler:not(.tg-matrix-spoiler-revealed) .tg-matrix-text * {
+	color: transparent !important;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
 }
 
 .tg-matrix-canvas {
@@ -173,6 +202,91 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 
 .tg-matrix-spoiler:focus-visible {
 	box-shadow: 0 0 0 2px #00ff41;
+}
+
+.setting-item.tg-plugin-cards {
+	display: block;
+}
+
+.tg-plugin-card-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(16em, 1fr));
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+}
+
+.tg-plugin-card {
+	height: auto;
+	padding: var(--size-4-3);
+	background-color: var(--background-secondary);
+	box-shadow: none;
+	text-align: start;
+	white-space: normal;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-3);
+	width: 100%;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	cursor: pointer;
+}
+
+.tg-plugin-card:hover {
+	border-color: var(--background-modifier-border-hover);
+	background-color: var(--background-modifier-hover);
+}
+
+.tg-plugin-card-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: var(--size-4-8);
+	height: var(--size-4-8);
+	border-radius: var(--radius-m);
+	background-color: var(--background-primary);
+	color: var(--text-accent);
+}
+
+.tg-plugin-card-details {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+	min-width: 0;
+}
+
+.tg-plugin-card-name {
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+	line-height: 1.3;
+}
+
+.tg-plugin-card-description {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tg-plugin-card-arrow {
+	display: flex;
+	align-items: center;
+	align-self: center;
+	flex: 0 0 auto;
+	margin-inline-start: auto;
+	color: var(--text-faint);
+}
+
+.tg-plugin-card-arrow .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.tg-plugin-card:hover .tg-plugin-card-arrow {
+	color: var(--text-muted);
 }
 
 .modal.tg-whats-new-modal {
