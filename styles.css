@@ -62,14 +62,6 @@
 	outline: none;
 }
 
-.tg-block-spoiler:not(.tg-block-spoiler-revealed) * {
-	color: transparent !important;
-	background-color: transparent !important;
-	border-color: transparent !important;
-	box-shadow: none !important;
-	text-shadow: none !important;
-}
-
 .tg-block-spoiler-revealed {
 	color: inherit;
 	background-color: var(--tg-block-tint, transparent);
@@ -120,14 +112,6 @@ body.obsidian-blur-hover .tg-blur-spoiler:not(.tg-blur-spoiler-revealed):hover {
 	outline: none;
 }
 
-.tg-scramble-spoiler:not(.tg-scramble-spoiler-revealed) * {
-	color: inherit !important;
-	background-color: transparent !important;
-	font-weight: normal !important;
-	font-style: normal !important;
-	text-decoration: none !important;
-}
-
 .tg-scramble-word {
 	white-space: nowrap;
 }
@@ -169,14 +153,6 @@ button.tg-scramble-reshuffle-setting-btn {
 	padding: 0 3px;
 	color: transparent;
 	user-select: none;
-}
-
-.tg-matrix-spoiler:not(.tg-matrix-spoiler-revealed) .tg-matrix-text * {
-	color: transparent !important;
-	background-color: transparent !important;
-	border-color: transparent !important;
-	box-shadow: none !important;
-	text-shadow: none !important;
 }
 
 .tg-matrix-canvas {
