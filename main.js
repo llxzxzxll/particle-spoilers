@@ -1301,7 +1301,7 @@ function createSpoilerViewPlugin(settings, registry, editorViews) {
 
 const RELEASE_NOTES = [
 	{
-		version: "1.7.0",
+		version: "1.7.1",
 		date: "2026-10-14",
 		showOnUpdate: true,
 		new: [
@@ -1310,10 +1310,12 @@ const RELEASE_NOTES = [
 		],
 		changed: [
 			"Lowered the minimum `Scramble speed` limit from `0.2` to `0.1` to match `Matrix speed`.",
+			"**Spoiler styling & bleed-through effect**: restored the original visual behavior for nested elements inside spoilers to match previous versions.",
 			"Reduced base line-height of the Matrix block (`line-height: 1.2`) in CSS for a compact and clean inline appearance."
 		],
 		fixed: [
-			"**Full-line spoilers with nested syntax**: fixed an issue where spoilers wrapping an entire line or containing nested formatting (bold, italic, highlights, strikethrough, links, or inline code) failed to hide the text in Reading mode and Live Preview."
+			"**Full-line spoilers with nested syntax**: fixed an issue where spoilers wrapping an entire line or containing nested formatting (bold, italic, highlights, strikethrough, links, or inline code) failed to hide the text in Reading mode and Live Preview.",
+			"**CSS & theme compatibility**: removed `!important` overrides in `styles.css` to follow Obsidian guidelines and prevent style conflicts with custom themes and snippets."
 		]
 	}
 ];
