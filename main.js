@@ -1,6 +1,6 @@
 "use strict";
 
-const { Plugin, PluginSettingTab, Setting, MarkdownView, Modal, Platform } = require("obsidian");
+const { Plugin, PluginSettingTab, Setting, SettingGroup, MarkdownView, Modal, Platform, setIcon } = require("obsidian");
 const { WidgetType, Decoration, ViewPlugin } = require("@codemirror/view");
 const { RangeSetBuilder } = require("@codemirror/state");
 
@@ -17,22 +17,109 @@ const DEFAULT_SETTINGS = {
 	blurAmount: 5,
 	blurRevealOnHover: false,
 	scrambleUseAccentColor: false,
-	scrambleSpeed: 1,
-	matrixSpeed: 1,
+	scrambleSpeed: 0.20,
+	scrambleStaticMode: false,
+	matrixSpeed: 0.10,
 	customMarker: "||",
 	showWhatsNewOnUpdate: true,
 	lastSeenVersion: ""
 };
 
 const TWO_PI = Math.PI * 2;
+const OTHER_PLUGIN_URL = "obsidian://show-plugin?id=embed-file-menu";
+
+const BLOCK_TAGS = new Set([
+	"P", "DIV", "LI", "UL", "OL", "BLOCKQUOTE", "PRE", "TABLE",
+	"THEAD", "TBODY", "TFOOT", "TR", "TD", "TH", "H1", "H2",
+	"H3", "H4", "H5", "H6", "HR", "SECTION", "ARTICLE", "HEADER",
+	"FOOTER", "ASIDE", "DETAILS", "SUMMARY", "FIGURE", "FIGCAPTION",
+	"DL", "DT", "DD"
+]);
+
+const SKIP_TAGS = new Set([
+	"PRE", "SCRIPT", "STYLE", "TEXTAREA", "SVG", "CANVAS", "BUTTON"
+]);
+
+const SPOILER_SELECTOR = ".tg-spoiler, .tg-block-spoiler, .tg-blur-spoiler, .tg-scramble-spoiler, .tg-matrix-spoiler";
 
 function escapeRegExp(string) {
-	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function getSpoilerRegex(marker) {
 	const escaped = escapeRegExp(marker);
 	return new RegExp(`${escaped}([^\\n]+?)${escaped}`, "g");
+}
+
+function isSafeUrl(url) {
+	return /^https?:\/\//i.test(url);
+}
+
+function renderInlineMarkdownToFragment(text) {
+	const fragment = document.createDocumentFragment();
+	const appendParsed = (str, target) => {
+		const tokenRe = /`([^`\n]+)`|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|==([\s\S]+?)==|~~([\s\S]+?)~~|\*([^\s*](?:[\s\S]*?[^\s*])?)\*|_([^\s_](?:[\s\S]*?[^\s_])?)_|\[\[([^\]\n]+)\]\]|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
+		let lastIndex = 0;
+		let match;
+		while ((match = tokenRe.exec(str)) !== null) {
+			if (match.index > lastIndex) {
+				target.appendChild(document.createTextNode(str.slice(lastIndex, match.index)));
+			}
+			if (match[1] !== undefined) {
+				const codeEl = document.createElement("code");
+				codeEl.textContent = match[1];
+				target.appendChild(codeEl);
+			} else if (match[2] !== undefined || match[3] !== undefined) {
+				const strongEl = document.createElement("strong");
+				appendParsed(match[2] ?? match[3], strongEl);
+				target.appendChild(strongEl);
+			} else if (match[4] !== undefined) {
+				const markEl = document.createElement("mark");
+				appendParsed(match[4], markEl);
+				target.appendChild(markEl);
+			} else if (match[5] !== undefined) {
+				const delEl = document.createElement("del");
+				appendParsed(match[5], delEl);
+				target.appendChild(delEl);
+			} else if (match[6] !== undefined || match[7] !== undefined) {
+				const emEl = document.createElement("em");
+				appendParsed(match[6] ?? match[7], emEl);
+				target.appendChild(emEl);
+			} else if (match[8] !== undefined) {
+				const rawLink = match[8];
+				const pipeIdx = rawLink.indexOf("|");
+				const display = pipeIdx !== -1 ? rawLink.slice(pipeIdx + 1) : rawLink;
+				const linkEl = document.createElement("a");
+				linkEl.className = "internal-link";
+				linkEl.textContent = display;
+				target.appendChild(linkEl);
+			} else if (match[9] !== undefined && match[10] !== undefined) {
+				const aEl = document.createElement("a");
+				aEl.className = "external-link";
+				aEl.textContent = match[9];
+				if (isSafeUrl(match[10])) {
+					aEl.setAttribute("href", match[10]);
+					aEl.setAttribute("rel", "noopener noreferrer");
+					aEl.setAttribute("target", "_blank");
+				}
+				target.appendChild(aEl);
+			}
+			lastIndex = tokenRe.lastIndex;
+		}
+		if (lastIndex < str.length) {
+			target.appendChild(document.createTextNode(str.slice(lastIndex)));
+		}
+	};
+	appendParsed(text, fragment);
+	return fragment;
+}
+
+function populateSpoilerContent(containerEl, content) {
+	if (content instanceof Node) {
+		containerEl.appendChild(content.cloneNode(true));
+	} else {
+		containerEl.appendChild(renderInlineMarkdownToFragment(String(content ?? "")));
+	}
 }
 
 class SharedAnimationScheduler {
@@ -102,19 +189,35 @@ class SpoilerRegistry {
 	}
 	add(instance) { this.instances.add(instance); }
 	remove(instance) { this.instances.delete(instance); }
-	
+
 	refreshDensity() {
 		for (let instance of this.instances) {
 			instance.applyDensity();
 		}
 	}
-	
+
 	refreshColors() {
 		for (let instance of this.instances) {
 			instance.applyColorFromText();
 		}
 	}
-	
+
+	reshuffleScramble() {
+		for (let instance of this.instances) {
+			if (!instance.destroyed && !instance.revealed && typeof instance.shuffle === "function") {
+				instance.shuffle();
+			}
+		}
+	}
+
+	updateScrambleMode() {
+		for (let instance of this.instances) {
+			if (typeof instance.updateStaticMode === "function") {
+				instance.updateStaticMode();
+			}
+		}
+	}
+
 	destroyAll() {
 		for (let instance of Array.from(this.instances)) {
 			instance.destroy();
@@ -124,77 +227,77 @@ class SpoilerRegistry {
 }
 
 class SpoilerInstance {
-	constructor(text, settings, registry) {
+	constructor(content, settings, registry) {
 		this.particles = [];
 		this.revealed = false;
 		this.destroyed = false;
 		this.settings = settings;
 		this.registry = registry;
-		this.particleColor = "currentColor"; 
-		
+		this.particleColor = "currentColor";
+
 		this.registry.add(this);
-		
+
 		this.el = document.createElement("span");
 		this.el.className = "tg-spoiler";
 		this.el.setAttribute("tabindex", "0");
 		this.el.setAttribute("role", "button");
 		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
-		
+
 		this.textEl = document.createElement("span");
 		this.textEl.className = "tg-spoiler-text";
-		this.textEl.textContent = text;
-		
+		populateSpoilerContent(this.textEl, content);
+
 		this.canvas = document.createElement("canvas");
 		this.canvas.className = "tg-spoiler-canvas";
-		
+
 		this.el.appendChild(this.textEl);
 		this.el.appendChild(this.canvas);
-		
+
 		this.ctx = this.canvas.getContext("2d");
-		
+
 		this.el.addEventListener("click", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			this.toggle();
 		});
-		
+
 		this.el.addEventListener("keydown", (e) => {
 			if (e.key === "Enter" || e.key === " ") {
 				e.preventDefault();
 				this.toggle();
 			}
 		});
-		
+
 		this.el.addEventListener("mouseleave", () => {
 			if (this.revealed && this.settings.hideOnMouseLeave) {
 				this.hide();
 			}
 		});
-		
+
 		this.resizeObserver = new ResizeObserver(() => this.setup());
 		this.resizeObserver.observe(this.el);
-		
+
 		requestAnimationFrame(() => this.setup());
 	}
 
 	setup() {
 		if (this.destroyed) return;
-		
+
 		const rect = this.el.getBoundingClientRect();
 		const width = Math.max(rect.width, this.textEl.offsetWidth, 4);
 		const height = Math.max(rect.height, this.textEl.offsetHeight, 4);
 		const dpr = window.devicePixelRatio || 1;
-		
+
 		this.canvas.width = width * dpr;
 		this.canvas.height = height * dpr;
 		this.canvas.style.width = `${width}px`;
 		this.canvas.style.height = `${height}px`;
-		
+
 		this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-		
+
 		this.applyColorFromText();
 		this.regenerateParticles(width, height);
-		
+
 		if (!this.revealed) {
 			this.start();
 		}
@@ -202,14 +305,14 @@ class SpoilerInstance {
 
 	applyColorFromText() {
 		let baseColor;
-		
-		this.textEl.style.color = ''; 
+
+		this.textEl.style.color = "";
 		const originalTextColor = getComputedStyle(this.textEl).color;
 
 		if (this.settings.useAccentColor) {
-			baseColor = getComputedStyle(document.body).getPropertyValue('--interactive-accent').trim();
+			baseColor = getComputedStyle(document.body).getPropertyValue("--interactive-accent").trim();
 			if (!baseColor) baseColor = originalTextColor;
-			
+
 			if (!this.revealed) {
 				this.textEl.style.color = baseColor;
 			}
@@ -219,9 +322,9 @@ class SpoilerInstance {
 
 		const rgb = resolveColorToRgb(baseColor);
 		if (rgb) {
-			this.particleColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-			this.el.style.setProperty("--tg-spoiler-tint-bg", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.16)`);
-			this.el.style.setProperty("--tg-spoiler-tint-ring", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.4)`);
+			this.particleColor = `rgb(${rgb[0]}, ${rgb[1]},${rgb[2]})`;
+			this.el.style.setProperty("--tg-spoiler-tint-bg", `rgba(${rgb[0]}, ${rgb[1]},${rgb[2]}, 0.16)`);
+			this.el.style.setProperty("--tg-spoiler-tint-ring", `rgba(${rgb[0]}, ${rgb[1]},${rgb[2]}, 0.4)`);
 		} else {
 			this.particleColor = baseColor;
 			this.el.style.setProperty("--tg-spoiler-tint-bg", baseColor);
@@ -239,7 +342,7 @@ class SpoilerInstance {
 		const dpr = window.devicePixelRatio || 1;
 		const width = this.canvas.width / dpr;
 		const height = this.canvas.height / dpr;
-		
+
 		if (width <= 0 || height <= 0) return;
 		this.regenerateParticles(width, height);
 	}
@@ -272,9 +375,9 @@ class SpoilerInstance {
 		const width = this.canvas.width / dpr;
 		const height = this.canvas.height / dpr;
 		const ctx = this.ctx;
-		
+
 		ctx.clearRect(0, 0, width, height);
-		
+
 		const speed = this.settings.particleSpeed;
 
 		ctx.fillStyle = this.particleColor;
@@ -282,23 +385,23 @@ class SpoilerInstance {
 		for (let p of this.particles) {
 			p.x += p.dirX * p.speedFactor * speed;
 			p.y += p.dirY * p.speedFactor * speed;
-			
+
 			if (p.x < 0) { p.x = 0; p.dirX *= -1; }
 			if (p.x > width) { p.x = width; p.dirX *= -1; }
 			if (p.y < 0) { p.y = 0; p.dirY *= -1; }
 			if (p.y > height) { p.y = height; p.dirY *= -1; }
-			
+
 			p.alpha += p.alphaDir * 0.01;
 			if (p.alpha <= 0.2 || p.alpha >= 1) {
 				p.alphaDir *= -1;
 			}
-			
+
 			ctx.beginPath();
 			ctx.globalAlpha = p.alpha;
 			ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
 			ctx.fill();
 		}
-		
+
 		ctx.globalAlpha = 1;
 	}
 
@@ -309,22 +412,22 @@ class SpoilerInstance {
 	show() {
 		this.revealed = true;
 		this.el.classList.add("tg-spoiler-revealed");
-		
+
 		if (this.settings.useAccentColor) {
-			this.textEl.style.color = '';
+			this.textEl.style.color = "";
 		}
-		
+
 		this.stop();
 	}
 
 	hide() {
 		this.revealed = false;
 		this.el.classList.remove("tg-spoiler-revealed");
-		
+
 		if (this.settings.useAccentColor) {
 			this.textEl.style.color = this.particleColor;
 		}
-		
+
 		this.start();
 	}
 
@@ -337,7 +440,7 @@ class SpoilerInstance {
 }
 
 class BlockSpoilerInstance {
-	constructor(text, settings, registry) {
+	constructor(content, settings, registry) {
 		this.revealed = false;
 		this.destroyed = false;
 		this.settings = settings;
@@ -347,7 +450,7 @@ class BlockSpoilerInstance {
 
 		this.el = document.createElement("span");
 		this.el.className = "tg-block-spoiler";
-		this.el.textContent = text;
+		populateSpoilerContent(this.el, content);
 		this.el.setAttribute("tabindex", "0");
 		this.el.setAttribute("role", "button");
 		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
@@ -381,8 +484,8 @@ class BlockSpoilerInstance {
 
 		const rgb = resolveColorToRgb(raw);
 		if (rgb) {
-			this.el.style.setProperty("--tg-block-color", `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`);
-			this.el.style.setProperty("--tg-block-tint", `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.14)`);
+			this.el.style.setProperty("--tg-block-color", `rgb(${rgb[0]}, ${rgb[1]},${rgb[2]})`);
+			this.el.style.setProperty("--tg-block-tint", `rgba(${rgb[0]}, ${rgb[1]},${rgb[2]}, 0.14)`);
 		} else {
 			this.el.style.setProperty("--tg-block-color", raw);
 			this.el.style.setProperty("--tg-block-tint", raw);
@@ -413,7 +516,7 @@ class BlockSpoilerInstance {
 }
 
 class BlurSpoilerInstance {
-	constructor(text, settings, registry) {
+	constructor(content, settings, registry) {
 		this.revealed = false;
 		this.destroyed = false;
 		this.settings = settings;
@@ -423,7 +526,7 @@ class BlurSpoilerInstance {
 
 		this.el = document.createElement("span");
 		this.el.className = "tg-blur-spoiler";
-		this.el.textContent = text;
+		populateSpoilerContent(this.el, content);
 		this.el.setAttribute("tabindex", "0");
 		this.el.setAttribute("role", "button");
 		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
@@ -524,7 +627,7 @@ const TRANSFORM_90 = "rotate(90deg) scale(0.85)";
 const TRANSFORM_MINUS_90 = "rotate(-90deg) scale(0.85)";
 
 class ScrambleSpoilerInstance {
-	constructor(text, settings, registry) {
+	constructor(content, settings, registry) {
 		this.revealed = false;
 		this.destroyed = false;
 		this.measured = false;
@@ -542,29 +645,8 @@ class ScrambleSpoilerInstance {
 		this.el.setAttribute("role", "button");
 		this.el.setAttribute("aria-label", "Spoiler, click to reveal");
 
-		let word = null;
-		for (const ch of Array.from(text)) {
-			if (/\s/.test(ch)) {
-				word = null;
-				this.el.appendChild(document.createTextNode(ch));
-				continue;
-			}
-			if (!word) {
-				word = document.createElement("span");
-				word.className = "tg-scramble-word";
-				this.el.appendChild(word);
-			}
-			const span = document.createElement("span");
-			span.className = "tg-scramble-char";
-			span.textContent = ch;
-			word.appendChild(span);
-			this.cells.push({ 
-				span, 
-				original: ch,
-				lastChar: ch,
-				lastTransform: ""
-			});
-		}
+		populateSpoilerContent(this.el, content);
+		this.buildScrambleCells();
 
 		this.order = Array.from({ length: this.cells.length }, (_, i) => i);
 		this.allSame = this.cells.length > 0 && this.cells.every((c) => c.original === this.cells[0].original);
@@ -583,13 +665,52 @@ class ScrambleSpoilerInstance {
 				this.isVisible = entry.isIntersecting;
 				if (!this.isVisible) {
 					this.stop();
-				} else if (!this.revealed) {
+				} else if (!this.revealed && !this.settings.scrambleStaticMode) {
 					this.lastShuffle = performance.now();
 					this.start();
 				}
 			}
 		});
 		this.intersectionObserver.observe(this.el);
+	}
+
+	buildScrambleCells() {
+		const walker = document.createTreeWalker(this.el, NodeFilter.SHOW_TEXT);
+		const textNodes = [];
+		let node;
+		while ((node = walker.nextNode())) {
+			textNodes.push(node);
+		}
+
+		for (const textNode of textNodes) {
+			const raw = textNode.nodeValue || "";
+			if (!raw) continue;
+			const frag = document.createDocumentFragment();
+			let word = null;
+			for (const ch of Array.from(raw)) {
+				if (/\s/.test(ch)) {
+					word = null;
+					frag.appendChild(document.createTextNode(ch));
+					continue;
+				}
+				if (!word) {
+					word = document.createElement("span");
+					word.className = "tg-scramble-word";
+					frag.appendChild(word);
+				}
+				const span = document.createElement("span");
+				span.className = "tg-scramble-char";
+				span.textContent = ch;
+				word.appendChild(span);
+				this.cells.push({
+					span,
+					original: ch,
+					lastChar: ch,
+					lastTransform: ""
+				});
+			}
+			textNode.parentNode?.replaceChild(frag, textNode);
+		}
 	}
 
 	measure() {
@@ -612,7 +733,17 @@ class ScrambleSpoilerInstance {
 
 		if (!this.revealed) {
 			this.shuffle();
-			if (this.isVisible) this.start();
+			if (this.isVisible && !this.settings.scrambleStaticMode) this.start();
+		}
+	}
+
+	updateStaticMode() {
+		if (this.destroyed) return;
+		if (this.settings.scrambleStaticMode) {
+			this.stop();
+		} else if (!this.revealed && this.isVisible) {
+			this.lastShuffle = performance.now();
+			this.start();
 		}
 	}
 
@@ -669,7 +800,7 @@ class ScrambleSpoilerInstance {
 	}
 
 	start() {
-		if (this.destroyed || !this.isVisible) return;
+		if (this.destroyed || !this.isVisible || this.settings.scrambleStaticMode) return;
 		sharedAnimator.add(this);
 	}
 
@@ -678,6 +809,10 @@ class ScrambleSpoilerInstance {
 	}
 
 	tick() {
+		if (this.settings.scrambleStaticMode) {
+			this.stop();
+			return;
+		}
 		const now = performance.now();
 		const speed = Math.max(0.05, this.settings.scrambleSpeed ?? 1);
 		if (now - this.lastShuffle < SCRAMBLE_BASE_INTERVAL_MS / speed) return;
@@ -705,7 +840,7 @@ class ScrambleSpoilerInstance {
 		this.el.classList.remove("tg-scramble-spoiler-revealed");
 		this.applyColor();
 		this.shuffle();
-		if (this.isVisible) this.start();
+		if (this.isVisible && !this.settings.scrambleStaticMode) this.start();
 	}
 
 	destroy() {
@@ -720,9 +855,9 @@ class ScrambleSpoilerInstance {
 const MATRIX_CHARS = Array.from("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789:.=*+-<>");
 const MATRIX_TAIL_COLOR = "#00d433";
 const MATRIX_HEAD_COLOR = "#a8ffbe";
-const MATRIX_TRAIL_LENGTH = 5;      
-const MATRIX_ROWS_PER_SECOND = 4;  
-const MATRIX_FPS = 30;              
+const MATRIX_TRAIL_LENGTH = 5;
+const MATRIX_ROWS_PER_SECOND = 4;
+const MATRIX_FPS = 30;
 const MATRIX_FRAME_INTERVAL = 1000 / MATRIX_FPS;
 
 function randomMatrixChar() {
@@ -730,7 +865,7 @@ function randomMatrixChar() {
 }
 
 class MatrixSpoilerInstance {
-	constructor(text, settings, registry) {
+	constructor(content, settings, registry) {
 		this.revealed = false;
 		this.destroyed = false;
 		this.isVisible = true;
@@ -758,7 +893,7 @@ class MatrixSpoilerInstance {
 
 		this.textEl = document.createElement("span");
 		this.textEl.className = "tg-matrix-text";
-		this.textEl.textContent = text;
+		populateSpoilerContent(this.textEl, content);
 
 		this.canvas = document.createElement("canvas");
 		this.canvas.className = "tg-matrix-canvas";
@@ -912,69 +1047,165 @@ class MatrixSpoilerInstance {
 	}
 }
 
-function createSpoilerInstance(text, settings, registry) {
+function createSpoilerInstance(content, settings, registry) {
 	if (settings.spoilerStyle === "block") {
-		return new BlockSpoilerInstance(text, settings, registry);
+		return new BlockSpoilerInstance(content, settings, registry);
 	} else if (settings.spoilerStyle === "blur") {
-		return new BlurSpoilerInstance(text, settings, registry);
+		return new BlurSpoilerInstance(content, settings, registry);
 	} else if (settings.spoilerStyle === "scramble") {
-		return new ScrambleSpoilerInstance(text, settings, registry);
+		return new ScrambleSpoilerInstance(content, settings, registry);
 	} else if (settings.spoilerStyle === "matrix") {
-		return new MatrixSpoilerInstance(text, settings, registry);
+		return new MatrixSpoilerInstance(content, settings, registry);
 	}
-	return new SpoilerInstance(text, settings, registry);
+	return new SpoilerInstance(content, settings, registry);
+}
+
+function collectLineRuns(rootEl) {
+	const lines = [];
+	let currentLine = [];
+	let currentOffset = 0;
+
+	const flushLine = () => {
+		if (currentLine.length > 0) {
+			lines.push(currentLine);
+			currentLine = [];
+			currentOffset = 0;
+		}
+	};
+
+	const walk = (node, inCode) => {
+		if (node.nodeType === Node.TEXT_NODE) {
+			const val = node.nodeValue || "";
+			if (val.length > 0) {
+				currentLine.push({
+					node,
+					start: currentOffset,
+					end: currentOffset + val.length,
+					isCode: inCode
+				});
+				currentOffset += val.length;
+			}
+			return;
+		}
+
+		if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+		const tag = node.tagName.toUpperCase();
+		if (SKIP_TAGS.has(tag)) return;
+		if (node.matches && node.matches(SPOILER_SELECTOR)) return;
+
+		if (tag === "BR") {
+			flushLine();
+			return;
+		}
+
+		const isBlock = BLOCK_TAGS.has(tag);
+		if (isBlock) flushLine();
+
+		const nextInCode = inCode || tag === "CODE";
+		for (let child = node.firstChild; child; child = child.nextSibling) {
+			walk(child, nextInCode);
+		}
+
+		if (isBlock) flushLine();
+	};
+
+	walk(rootEl, false);
+	flushLine();
+	return lines;
+}
+
+function resolveDomPosition(segments, offset, preferEnd) {
+	for (let i = 0; i < segments.length; i++) {
+		const seg = segments[i];
+		if (preferEnd) {
+			if (offset >= seg.start && offset <= seg.end) {
+				return { node: seg.node, offset: offset - seg.start };
+			}
+		} else {
+			if (offset >= seg.start && offset < seg.end) {
+				return { node: seg.node, offset: offset - seg.start };
+			}
+		}
+	}
+	const last = segments[segments.length - 1];
+	return { node: last.node, offset: last.end - last.start };
+}
+
+function cleanupEmptyLeadingInlineAncestor(range, startNode, endNode, rootEl) {
+	let curr = startNode.nodeType === Node.TEXT_NODE ? startNode.parentElement : startNode;
+	let topEmpty = null;
+	while (curr && curr !== rootEl && !BLOCK_TAGS.has(curr.tagName.toUpperCase())) {
+		if (curr.contains(endNode)) break;
+		if ((curr.textContent || "").length === 0) {
+			topEmpty = curr;
+			curr = curr.parentElement;
+		} else {
+			break;
+		}
+	}
+	if (topEmpty && topEmpty.parentNode) {
+		range.setStartBefore(topEmpty);
+		range.collapse(true);
+		topEmpty.remove();
+	}
 }
 
 function renderMarkdownSpoilers(el, settings, registry) {
 	const marker = settings.customMarker;
+	if (!marker || marker.length < 2) return;
 	const regex = getSpoilerRegex(marker);
+	const lines = collectLineRuns(el);
 
-	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-		acceptNode: (node) => {
-			const parent = node.parentElement;
-			if (!parent || parent.closest("code, pre, .tg-spoiler")) {
-				return NodeFilter.FILTER_REJECT;
+	for (const segments of lines) {
+		let searchText = "";
+		for (const seg of segments) {
+			const len = seg.end - seg.start;
+			if (seg.isCode) {
+				searchText += "\uFFFC".repeat(len);
+			} else {
+				searchText += (seg.node.nodeValue || "").replace(/[\r\n]/g, " ");
 			}
-			if (!node.textContent || !node.textContent.includes(marker)) {
-				return NodeFilter.FILTER_SKIP;
-			}
-			return NodeFilter.FILTER_ACCEPT;
 		}
-	});
 
-	const nodesToReplace = [];
-	let currentNode;
-	while ((currentNode = walker.nextNode())) {
-		nodesToReplace.push(currentNode);
-	}
+		if (!searchText.includes(marker)) continue;
 
-	for (let node of nodesToReplace) {
-		const text = node.textContent || "";
 		regex.lastIndex = 0;
-		if (!regex.test(text)) continue;
-		
-		regex.lastIndex = 0;
-		const fragment = document.createDocumentFragment();
-		let lastIndex = 0;
+		const matches = [];
 		let match;
-		
-		while ((match = regex.exec(text))) {
-			const [fullMatch, innerText] = match;
-			
-			if (match.index > lastIndex) {
-				fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
-			}
-			
-			const spoiler = createSpoilerInstance(innerText, settings, registry);
-			fragment.appendChild(spoiler.el);
-			lastIndex = match.index + fullMatch.length;
+		while ((match = regex.exec(searchText)) !== null) {
+			matches.push({
+				matchStart: match.index,
+				matchEnd: match.index + match[0].length,
+				contentStart: match.index + marker.length,
+				contentEnd: match.index + match[0].length - marker.length
+			});
 		}
-		
-		if (lastIndex < text.length) {
-			fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+
+		if (matches.length === 0) continue;
+
+		for (let i = matches.length - 1; i >= 0; i--) {
+			const m = matches[i];
+			const startPos = resolveDomPosition(segments, m.matchStart, false);
+			const contentStartPos = resolveDomPosition(segments, m.contentStart, true);
+			const contentEndPos = resolveDomPosition(segments, m.contentEnd, false);
+			const endPos = resolveDomPosition(segments, m.matchEnd, true);
+
+			const innerRange = document.createRange();
+			innerRange.setStart(contentStartPos.node, contentStartPos.offset);
+			innerRange.setEnd(contentEndPos.node, contentEndPos.offset);
+			const contentFragment = innerRange.cloneContents();
+
+			const fullRange = document.createRange();
+			fullRange.setStart(startPos.node, startPos.offset);
+			fullRange.setEnd(endPos.node, endPos.offset);
+			fullRange.deleteContents();
+
+			cleanupEmptyLeadingInlineAncestor(fullRange, startPos.node, endPos.node, el);
+
+			const spoiler = createSpoilerInstance(contentFragment, settings, registry);
+			fullRange.insertNode(spoiler.el);
 		}
-		
-		node.parentNode?.replaceChild(fragment, node);
 	}
 }
 
@@ -985,11 +1216,16 @@ class SpoilerWidget extends WidgetType {
 		this.settings = settings;
 		this.registry = registry;
 		this.style = settings.spoilerStyle;
+		this.staticMode = settings.scrambleStaticMode;
 		this.instance = null;
 	}
 
 	eq(other) {
-		return other.text === this.text && other.style === this.style;
+		return (
+			other.text === this.text &&
+			other.style === this.style &&
+			other.staticMode === this.staticMode
+		);
 	}
 
 	toDOM() {
@@ -1013,24 +1249,24 @@ function buildSpoilerDecorations(view, settings, registry) {
 	if (settings.disableInEditMode) {
 		return Decoration.none;
 	}
-	
+
 	const builder = new RangeSetBuilder();
 	const selection = view.state.selection;
 	const regex = getSpoilerRegex(settings.customMarker);
-	
+
 	for (let { from, to } of view.visibleRanges) {
 		const text = view.state.doc.sliceString(from, to);
 		regex.lastIndex = 0;
 		let match;
-		
+
 		while ((match = regex.exec(text))) {
 			const matchStart = from + match.index;
 			const matchEnd = matchStart + match[0].length;
-			
+
 			const isCursorInside = selection.ranges.some(
 				(range) => range.from <= matchEnd && range.to >= matchStart
 			);
-			
+
 			if (!isCursorInside) {
 				builder.add(
 					matchStart,
@@ -1064,27 +1300,22 @@ function createSpoilerViewPlugin(settings, registry, editorViews) {
 }
 
 const RELEASE_NOTES = [
-    {
-        version: "1.6.0",
-        date: "2026-10-02",
-        showOnUpdate: true,
-        new: [
-            "**Scramble style (shuffled letters)**: hides text by shuffling characters and randomly rotating them by ±90°. Each character retains its original width so the line does not jump.",
-            "**Matrix style (digital rain)**: transparent animated glyph rain over hidden text with a subtle neon glow.",
-            "**Reveal on hover**: spoilers in ==Blur==, ==Scramble==, and ==Matrix== styles can now be temporarily revealed by hovering. Clicking keeps the spoiler open.",
-            "**New settings**: added `Matrix speed` and `Scramble speed` sliders, as well as `Use accent color` theme toggles.<br><img src=\"https://github.com/user-attachments/assets/ae99073a-b0a5-416f-861c-a3736d3e711f\" />"
-        ],
-        improved: [
-            "**Matrix optimization**: animation is capped at 30 FPS to eliminate high CPU load on 120/144 Hz displays, and heavy CPU-based shadow blur was replaced with hardware-accelerated GPU glow.",
-            "**Scramble optimization**: character shuffling is now performed in-place without redundant memory allocations, eliminating FPS drops."
-        ],
-        changed: [
-            "Reduced base line-height of the Matrix block (`line-height: 1.2`) in CSS for a compact and clean inline appearance."
-        ],
-        upcoming: [
-            "**Static Scramble mode**: an option to make the Scramble effect static, with the ability to randomly reshuffle characters on demand using a ⟳ button."
-        ]
-    }
+	{
+		version: "1.7.0",
+		date: "2026-10-14",
+		showOnUpdate: true,
+		new: [
+			"**Static Scramble mode**: an option to keep scrambled characters static, with a `⟳` button in the plugin settings to randomly reshuffle characters on demand.",
+			"**New settings & About section**: added `Matrix speed` and `Scramble speed` sliders, `Use accent color` theme toggles"
+		],
+		changed: [
+			"Lowered the minimum `Scramble speed` limit from `0.2` to `0.1` to match `Matrix speed`.",
+			"Reduced base line-height of the Matrix block (`line-height: 1.2`) in CSS for a compact and clean inline appearance."
+		],
+		fixed: [
+			"**Full-line spoilers with nested syntax**: fixed an issue where spoilers wrapping an entire line or containing nested formatting (bold, italic, highlights, strikethrough, links, or inline code) failed to hide the text in Reading mode and Live Preview."
+		]
+	}
 ];
 
 const WHATS_NEW_CATEGORIES = [
@@ -1115,10 +1346,6 @@ function getReleaseNotesSince(lastSeen, current) {
 	return RELEASE_NOTES.filter(n =>
 		compareVersions(n.version, lastSeen) > 0 && compareVersions(n.version, current) <= 0
 	);
-}
-
-function isSafeUrl(url) {
-	return /^https?:\/\//i.test(url);
 }
 
 class WhatsNewModal extends Modal {
@@ -1262,15 +1489,15 @@ class ParticleSpoilerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.applyBlurHoverClass();
-		
-		this.registerMarkdownPostProcessor((el, ctx) => {
+
+		this.registerMarkdownPostProcessor((el) => {
 			renderMarkdownSpoilers(el, this.settings, this.registry);
 		});
-		
+
 		this.registerEditorExtension(
 			createSpoilerViewPlugin(this.settings, this.registry, this.editorViews)
 		);
-		
+
 		this.addSettingTab(new ParticleSpoilerSettingTab(this.app, this));
 
 		this.addRibbonIcon("eye-off", "Insert spoiler", () => {
@@ -1295,12 +1522,12 @@ class ParticleSpoilerPlugin extends Plugin {
 		this.themeObserver = new MutationObserver((mutations) => {
 			let shouldRefresh = false;
 			for (let mutation of mutations) {
-				if (mutation.type === 'attributes' && (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+				if (mutation.type === "attributes" && (mutation.attributeName === "style" || mutation.attributeName === "class")) {
 					shouldRefresh = true;
 					break;
 				}
 			}
-			
+
 			if (shouldRefresh) {
 				setTimeout(() => {
 					this.registry.refreshColors();
@@ -1310,7 +1537,7 @@ class ParticleSpoilerPlugin extends Plugin {
 
 		this.themeObserver.observe(document.body, {
 			attributes: true,
-			attributeFilter: ['style', 'class']
+			attributeFilter: ["style", "class"]
 		});
 	}
 
@@ -1381,6 +1608,61 @@ class ParticleSpoilerPlugin extends Plugin {
 	}
 }
 
+function createSettingGroupContainer(containerEl, heading) {
+	if (typeof SettingGroup === "function") {
+		const groupEl = containerEl.createDiv({ cls: "setting-group" });
+		const group = new SettingGroup(groupEl);
+		if (heading) group.setHeading(heading);
+		return {
+			addSetting: (cb) => {
+				let s = null;
+				group.addSetting((setting) => {
+					s = setting;
+					cb(setting);
+				});
+				return s;
+			}
+		};
+	}
+	if (heading) {
+		new Setting(containerEl).setName(heading).setHeading();
+	}
+	return {
+		addSetting: (cb) => {
+			const setting = new Setting(containerEl);
+			cb(setting);
+			return setting;
+		}
+	};
+}
+
+function renderOtherPluginCards(setting) {
+	setting.settingEl.addClass("tg-plugin-cards");
+	const listEl = setting.settingEl.createDiv({ cls: "tg-plugin-card-list" });
+	const plugins = [
+		{
+			name: "Embed File Menu",
+			icon: "lucide-file-symlink",
+			description: "Context menu actions for embedded files and notes",
+			url: OTHER_PLUGIN_URL
+		}
+	];
+	for (const item of plugins) {
+		const cardEl = listEl.createEl("button", {
+			cls: "tg-plugin-card",
+			attr: { type: "button" }
+		});
+		setIcon(cardEl.createDiv({ cls: "tg-plugin-card-icon" }), item.icon);
+		const detailsEl = cardEl.createDiv({ cls: "tg-plugin-card-details" });
+		detailsEl.createDiv({ cls: "tg-plugin-card-name", text: item.name });
+		detailsEl.createDiv({ cls: "tg-plugin-card-description", text: item.description });
+		setIcon(cardEl.createDiv({ cls: "tg-plugin-card-arrow" }), "lucide-chevron-right");
+		cardEl.addEventListener("click", () => {
+			window.open(item.url);
+		});
+	}
+}
+
 class ParticleSpoilerSettingTab extends PluginSettingTab {
 	constructor(app, plugin) {
 		super(app, plugin);
@@ -1390,7 +1672,7 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 	display() {
 		const { containerEl } = this;
 		containerEl.empty();
-		
+
 		containerEl.createEl("h2", { text: "Spoiler settings" });
 
 		new Setting(containerEl)
@@ -1478,18 +1760,48 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 		}
 
 		if (this.plugin.settings.spoilerStyle === "scramble") {
-			new Setting(containerEl)
-				.setName("Scramble speed")
-				.setDesc("How fast the letters are shuffled.")
-				.addSlider(slider => slider
-					.setLimits(0.2, 3, 0.1)
-					.setValue(this.plugin.settings.scrambleSpeed)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.scrambleSpeed = value;
-						await this.plugin.saveSettings();
-					})
-				);
+			const staticScrambleSetting = new Setting(containerEl)
+				.setName("Static scramble mode")
+				.setDesc("Make the Scramble effect static, with the ability to randomly reshuffle characters on demand using a ⟳ button.");
+
+			if (this.plugin.settings.scrambleStaticMode) {
+				staticScrambleSetting.addButton(btn => {
+					btn
+						.setButtonText("⟳")
+						.setTooltip("Reshuffle characters")
+						.onClick(() => {
+							this.plugin.registry.reshuffleScramble();
+						});
+					btn.buttonEl.addClass("tg-scramble-reshuffle-setting-btn");
+				});
+			}
+
+			staticScrambleSetting.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.scrambleStaticMode)
+				.onChange(async (value) => {
+					this.plugin.settings.scrambleStaticMode = value;
+					await this.plugin.saveSettings();
+					this.plugin.registry.updateScrambleMode();
+					this.plugin.refreshEditors();
+					this.plugin.refreshReadingViews();
+					this.display();
+				})
+			);
+
+			if (!this.plugin.settings.scrambleStaticMode) {
+				new Setting(containerEl)
+					.setName("Scramble speed")
+					.setDesc("How fast the letters are shuffled.")
+					.addSlider(slider => slider
+						.setLimits(0.1, 3, 0.1)
+						.setValue(this.plugin.settings.scrambleSpeed)
+						.setDynamicTooltip()
+						.onChange(async (value) => {
+							this.plugin.settings.scrambleSpeed = value;
+							await this.plugin.saveSettings();
+						})
+					);
+			}
 
 			new Setting(containerEl)
 				.setName("Use accent color")
@@ -1599,24 +1911,40 @@ class ParticleSpoilerSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
-			.setName("Show what's new after update")
-			.setDesc("Open the release notes window the first time the plugin starts after an update.")
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.showWhatsNewOnUpdate)
-				.onChange(async (value) => {
-					this.plugin.settings.showWhatsNewOnUpdate = value;
-					await this.plugin.saveSettings();
-				})
-			)
-			.addButton(btn => btn
-				.setButtonText("Show what's new")
-				.onClick(() => this.plugin.showWhatsNew(getLatestReleaseNotes()))
-			);
-
 		this.syntaxDesc = containerEl.createEl("p", {
 			text: `Syntax: ${this.plugin.settings.customMarker}hidden text${this.plugin.settings.customMarker} — turns the text into a spoiler. Works in both Reading mode and Live Preview.`,
 			cls: "setting-item-description"
+		});
+
+		const version = this.plugin.manifest.version;
+		const aboutGroup = createSettingGroupContainer(containerEl, "About");
+
+		aboutGroup.addSetting(setting => {
+			setting
+				.setName(`What's new in Particle Spoilers ${version}`)
+				.setDesc("See recent updates and improvements")
+				.addButton(btn => btn
+					.setButtonText("View recent updates")
+					.onClick(() => this.plugin.showWhatsNew(getLatestReleaseNotes()))
+				);
+		});
+
+		aboutGroup.addSetting(setting => {
+			setting
+				.setName("Show release notes after updating")
+				.setDesc("Disable to stop the What's new dialog from opening automatically after updates.")
+				.addToggle(toggle => toggle
+					.setValue(this.plugin.settings.showWhatsNewOnUpdate)
+					.onChange(async (value) => {
+						this.plugin.settings.showWhatsNewOnUpdate = value;
+						await this.plugin.saveSettings();
+					})
+				);
+		});
+
+		aboutGroup.addSetting(setting => {
+			setting.setName("Check out my other plugins");
+			renderOtherPluginCards(setting);
 		});
 	}
 }
